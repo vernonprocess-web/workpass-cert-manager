@@ -44,12 +44,13 @@ export default {
                 response = errorResponse('Not Found', 404);
             }
 
-            return addCorsHeaders(response, env);
+            return addCorsHeaders(response, env, request);
         } catch (err) {
             console.error('Unhandled error:', err.message, err.stack);
             return addCorsHeaders(
                 errorResponse('Internal Server Error: ' + err.message, 500),
-                env
+                env,
+                request
             );
         }
     },

@@ -6,7 +6,7 @@
 const API = (() => {
     const BASE_URL = window.location.hostname === 'localhost'
         ? 'http://localhost:8787'
-        : 'https://workpass-cert-manager-api.vernonprocess.workers.dev';
+        : 'https://workpass-cert-manager-api.vernon-process.workers.dev';
 
     async function request(endpoint, options = {}) {
         const url = `${BASE_URL}${endpoint}`;
