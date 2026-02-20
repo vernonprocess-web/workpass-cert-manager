@@ -1,0 +1,27 @@
+name = "workpass-cert-manager-api"
+main = "worker/src/index.js"
+compatibility_date = "2024-12-01"
+
+# ─── D1 Database ────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "workpass-cert-db"
+database_id = "<YOUR_D1_DATABASE_ID>"   # Replace after running: wrangler d1 create workpass-cert-db
+
+# ─── R2 Bucket ──────────────────────────────────────────────
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "workpass-cert-files"
+
+# ─── Environment Variables ──────────────────────────────────
+[vars]
+ENVIRONMENT = "production"
+CORS_ORIGIN = "https://workpass-cert-manager.pages.dev"
+
+# ─── Local Development Overrides ────────────────────────────
+[env.dev]
+name = "workpass-cert-manager-api-dev"
+
+[env.dev.vars]
+ENVIRONMENT = "development"
+CORS_ORIGIN = "http://localhost:8080"

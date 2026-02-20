@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="WorkPass Cert Manager — Manage work permits and trade certificates efficiently.">
+  <title>WorkPass Cert Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- ─── Sidebar Navigation ──────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="logo-title">WorkPass</h1>
+          <span class="logo-subtitle">Cert Manager</span>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#dashboard" class="nav-link active" data-page="dashboard" id="nav-dashboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="#workers" class="nav-link" data-page="workers" id="nav-workers">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Work Permits</span>
+      </a>
+      <a href="#certificates" class="nav-link" data-page="certificates" id="nav-certificates">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Certificates</span>
+      </a>
+      <a href="#upload" class="nav-link" data-page="upload" id="nav-upload">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Upload</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-text">
+        <span class="version">v1.0.0</span>
+        <span class="env-badge" id="env-badge">DEV</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── Mobile Header ───────────────────────────────────── -->
+  <header class="mobile-header" id="mobile-header">
+    <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span class="mobile-title">WorkPass Cert Manager</span>
+  </header>
+
+  <!-- ─── Main Content ────────────────────────────────────── -->
+  <main class="main-content" id="main-content">
+    <!-- Dashboard Page -->
+    <section class="page active" id="page-dashboard">
+      <div class="page-header">
+        <h2 class="page-title">Dashboard</h2>
+        <p class="page-description">Overview of work permits and certificates</p>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card stat-card--primary">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-total-workers">—</span>
+            <span class="stat-label">Total Workers</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--success">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-active-workers">—</span>
+            <span class="stat-label">Active Permits</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--warning">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-expiring-soon">—</span>
+            <span class="stat-label">Expiring Soon</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--danger">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-expired-workers">—</span>
+            <span class="stat-label">Expired Permits</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--info">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-total-certs">—</span>
+            <span class="stat-label">Total Certificates</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--purple">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-valid-certs">—</span>
+            <span class="stat-label">Valid Certificates</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Workers Table -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Recent Work Permits</h3>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table" id="dashboard-workers-table">
+            <thead>
+              <tr>
+                <th>FIN</th>
+                <th>Name</th>
+                <th>Employer</th>
+                <th>Sector</th>
+                <th>Status</th>
+                <th>Expiry</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-workers-tbody">
+              <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workers Page -->
+    <section class="page" id="page-workers">
+      <div class="page-header">
+        <h2 class="page-title">Work Permits</h2>
+        <div class="page-actions">
+          <div class="search-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="workers-search" placeholder="Search by name, FIN, employer...">
+          </div>
+          <select id="workers-status-filter" class="select-filter">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button class="btn btn-primary" id="btn-add-worker">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Worker
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrapper">
+          <table class="data-table" id="workers-table">
+            <thead>
+              <tr>
+                <th>FIN</th>
+                <th>Name</th>
+                <th>Work Permit No</th>
+                <th>Employer</th>
+                <th>Sector</th>
+                <th>Nationality</th>
+                <th>Status</th>
+                <th>Expiry Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="workers-tbody">
+              <tr><td colspan="9" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="workers-pagination"></div>
+      </div>
+    </section>
+
+    <!-- Certificates Page -->
+    <section class="page" id="page-certificates">
+      <div class="page-header">
+        <h2 class="page-title">Certificates</h2>
+        <div class="page-actions">
+          <select id="certs-type-filter" class="select-filter">
+            <option value="">All Types</option>
+            <option value="coretrade">CoreTrade</option>
+            <option value="myw">Multi-Year WP</option>
+            <option value="safety">Safety</option>
+          </select>
+          <select id="certs-status-filter" class="select-filter">
+            <option value="">All Statuses</option>
+            <option value="valid">Valid</option>
+            <option value="expired">Expired</option>
+            <option value="revoked">Revoked</option>
+          </select>
+          <button class="btn btn-primary" id="btn-add-cert">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Certificate
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrapper">
+          <table class="data-table" id="certs-table">
+            <thead>
+              <tr>
+                <th>Cert Name</th>
+                <th>Type</th>
+                <th>Cert No</th>
+                <th>Worker</th>
+                <th>Issuing Body</th>
+                <th>Status</th>
+                <th>Expiry Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="certs-tbody">
+              <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="certs-pagination"></div>
+      </div>
+    </section>
+
+    <!-- Upload Page -->
+    <section class="page" id="page-upload">
+      <div class="page-header">
+        <h2 class="page-title">Upload Documents</h2>
+        <p class="page-description">Upload work permit cards, certificates, and other documents</p>
+      </div>
+
+      <div class="upload-area" id="upload-area">
+        <div class="upload-zone" id="upload-zone">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="upload-icon">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <h3>Drag & drop files here</h3>
+          <p>or click to browse</p>
+          <input type="file" id="file-input" multiple accept="image/*,.pdf,.doc,.docx" hidden>
+        </div>
+
+        <div class="upload-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="upload-entity-type">Link to</label>
+              <select id="upload-entity-type" class="form-control">
+                <option value="">No link</option>
+                <option value="worker">Worker</option>
+                <option value="certificate">Certificate</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="upload-entity-id">ID</label>
+              <input type="number" id="upload-entity-id" class="form-control" placeholder="Entity ID">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" id="btn-upload" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Files
+          </button>
+        </div>
+
+        <div class="upload-progress" id="upload-progress" hidden>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <span class="progress-text" id="progress-text">Uploading...</span>
+        </div>
+
+        <div class="upload-results" id="upload-results"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ─── Modal ───────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">Modal</h3>
+        <button class="modal-close" id="modal-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- ─── Toast Notifications ─────────────────────────────── -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+    "name": "workpass-cert-manager-api",
+    "version": "1.0.0",
+    "description": "Cloudflare Worker API for WorkPass Cert Manager",
+    "main": "src/index.js",
+    "type": "module",
+    "scripts": {
+        "dev": "wrangler dev --local --persist-to=../.wrangler/state",
+        "deploy": "wrangler deploy"
+    },
+    "keywords": [],
+    "license": "MIT"
+}
