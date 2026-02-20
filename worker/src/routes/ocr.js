@@ -33,7 +33,7 @@ async function processOCR(request, env) {
 
     const formData = await request.formData();
     const file = formData.get('file');
-    const documentType = formData.get('document_type') || 'auto'; // work_permit | visit_pass | certification | auto
+    const documentType = formData.get('document_type') || 'auto';
 
     if (!file || !(file instanceof File)) {
         return errorResponse('No file provided', 400);
@@ -102,11 +102,23 @@ async function processOCR(request, env) {
 
 /**
  * Parse structured fields from raw OCR text.
- * Handles Work Permits, Visit Passes, and Certifications.
+ * Handles Singapore Work Permits, Visit Passes, and Certifications.
+ *
+ * Singapore Work Permit (Front) typical layout:
+ *   WORK PERMIT
+ *   Employment of Foreign Manpower Act (Chapter 91A)
+ *   Employer
+ *   COMPANY NAME PTE. LTD.
+ *   Name
+ *   WORKER FULL NAME
+ *   Work Permit No.    Sector
+ *   0 34773262         CONSTRUCTION
+ *   [FIN number may appear near barcode, e.g. K3358575]
  */
 function parseOCRText(rawText, documentType) {
     const text = rawText.toUpperCase();
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+    const upperLines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
     const result = {
         worker_name: null,
@@ -121,11 +133,207 @@ function parseOCRText(rawText, documentType) {
         expiry_date: null,
     };
 
-    // ─── FIN Number (e.g., G1234567A) ─────────────────────
-    const finMatch = text.match(/\b([FGMST]\d{7}[A-Z])\b/);
-    if (finMatch) result.fin_number = finMatch[1];
+    // Detect if this is a Work Permit card
+    const isWorkPermit = documentType === 'work_permit' ||
+        text.includes('WORK PERMIT') ||
+        text.includes('EMPLOYMENT OF FOREIGN MANPOWER');
 
-    // ─── Dates (DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY) ──
+    // ═══════════════════════════════════════════════════════════
+    // 1. WORK PERMIT NUMBER
+    //    Singapore format: typically 8-9 digits, sometimes
+    //    printed with spaces like "0 34773262"
+    // ═══════════════════════════════════════════════════════════
+    const wpPatterns = [
+        // "Work Permit No" followed by number on same or next line
+        /WORK\s*PERMIT\s*NO\.?\s*:?\s*(\d[\d\s]{6,})/i,
+        // Number after "WP No" 
+        /WP\s*NO\.?\s*:?\s*(\d[\d\s]{6,})/i,
+    ];
+
+    for (const pattern of wpPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            // Remove spaces from the number
+            result.fin_number = match[1].replace(/\s+/g, '').trim();
+            break;
+        }
+    }
+
+    // If "Work Permit No" label found but number is on the next line
+    if (!result.fin_number) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/WORK\s*PERMIT\s*NO/)) {
+                // Check if there's a number on the same line after the label
+                const sameLine = upperLines[i].match(/WORK\s*PERMIT\s*NO\.?\s*:?\s*(\d[\d\s]+)/);
+                if (sameLine) {
+                    result.fin_number = sameLine[1].replace(/\s+/g, '').trim();
+                } else if (i + 1 < upperLines.length) {
+                    // Next line should have the number
+                    const nextLine = upperLines[i + 1].trim();
+                    const numMatch = nextLine.match(/^(\d[\d\s]{5,})/);
+                    if (numMatch) {
+                        result.fin_number = numMatch[1].replace(/\s+/g, '').trim();
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. FIN NUMBER (e.g., G1234567A, K3358575)
+    //    Singapore FIN: starts with F, G, M, S, T, or K
+    //    followed by 7 digits and a letter
+    // ═══════════════════════════════════════════════════════════
+    const finMatch = text.match(/\b([FGMSTK]\d{7}[A-Z])\b/);
+    if (finMatch) {
+        // If we already found a WP number, store FIN separately;
+        // otherwise use FIN as the primary identifier
+        if (!result.fin_number) {
+            result.fin_number = finMatch[1];
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. WORKER NAME — line-by-line approach
+    //    Look for "Name" label and take the text on the next
+    //    line(s) that looks like a person name (all letters)
+    // ═══════════════════════════════════════════════════════════
+    for (let i = 0; i < upperLines.length; i++) {
+        const line = upperLines[i];
+
+        // Skip lines that contain "NAME" as part of another label
+        if (line.match(/^NAME\s*$/i) ||
+            line.match(/^NAME\s*[:\-]/i) ||
+            line.match(/^NAME\s+OF\s+(WORKER|HOLDER)/i)) {
+
+            // The name might be on the same line after the label
+            const sameLineMatch = line.match(/^NAME\s*(?:OF\s+(?:WORKER|HOLDER))?\s*[:\-]?\s+([A-Z][A-Z\s.'-]{2,})/);
+            if (sameLineMatch) {
+                const candidate = cleanName(sameLineMatch[1]);
+                if (isValidName(candidate)) {
+                    result.worker_name = candidate;
+                    break;
+                }
+            }
+
+            // Otherwise, look at the following lines
+            for (let j = i + 1; j < Math.min(i + 4, upperLines.length); j++) {
+                const nextLine = upperLines[j].trim();
+                // Skip FIN-like numbers, empty lines, and labels
+                if (nextLine.match(/^[A-Z]\d{7}[A-Z]$/)) continue; // FIN number
+                if (nextLine.match(/^\d+$/)) continue; // just numbers
+                if (nextLine.match(/^(WORK\s*PERMIT|SECTOR|DOB|DATE|SEX|EMPLOYER|NATIONALITY)/)) break;
+
+                // This line should be the name — all uppercase letters, spaces, dots, hyphens
+                if (nextLine.match(/^[A-Z][A-Z\s.'\-\/]{2,}$/) && !nextLine.match(/PTE|LTD|SDN|BHD|CORP|INC|COMPANY/)) {
+                    const candidate = cleanName(nextLine);
+                    if (isValidName(candidate)) {
+                        result.worker_name = candidate;
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    // Fallback: look for "NAME" with inline value
+    if (!result.worker_name) {
+        const nameInline = text.match(/NAME\s*[:\-]\s*([A-Z][A-Z\s.'\-]{2,})/);
+        if (nameInline) {
+            const candidate = cleanName(nameInline[1]);
+            if (isValidName(candidate)) {
+                result.worker_name = candidate;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. EMPLOYER — line-by-line approach
+    // ═══════════════════════════════════════════════════════════
+    for (let i = 0; i < upperLines.length; i++) {
+        if (upperLines[i].match(/^EMPLOYER\s*$/i) ||
+            upperLines[i].match(/^EMPLOYER\s*[:\-]/i)) {
+
+            // Same line?
+            const sameLineMatch = upperLines[i].match(/^EMPLOYER\s*[:\-]?\s+(.+)/);
+            if (sameLineMatch && sameLineMatch[1].trim().length > 2) {
+                result.employer_name = sameLineMatch[1].trim();
+                break;
+            }
+
+            // Next line
+            if (i + 1 < upperLines.length) {
+                const nextLine = upperLines[i + 1].trim();
+                if (nextLine.length > 2 && !nextLine.match(/^(NAME|WORK\s*PERMIT|SECTOR)/)) {
+                    result.employer_name = nextLine;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    // Fallback: look for PTE LTD pattern
+    if (!result.employer_name) {
+        const pteMatch = text.match(/([A-Z0-9][A-Z0-9\s&.,]+PTE\.?\s*LTD\.?)/);
+        if (pteMatch) result.employer_name = pteMatch[1].trim();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 5. SECTOR (Singapore Work Permits have this)
+    // ═══════════════════════════════════════════════════════════
+    const knownSectors = ['CONSTRUCTION', 'MARINE', 'MANUFACTURING', 'PROCESS', 'SERVICES', 'DOMESTIC'];
+    for (const sector of knownSectors) {
+        if (text.includes(sector)) {
+            // Store as part of employer info or separate
+            // For now, we don't have a dedicated field
+            break;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 6. NATIONALITY
+    // ═══════════════════════════════════════════════════════════
+    const nationalityPatterns = [
+        /NATIONALITY\s*[:\-]?\s*([A-Z][A-Z\s]+?)(?:\n|$)/,
+        /COUNTRY\s*(?:OF\s*ORIGIN)?\s*[:\-]?\s*([A-Z][A-Z\s]+?)(?:\n|$)/,
+    ];
+    const knownNationalities = [
+        'INDIAN', 'INDIA', 'BANGLADESHI', 'BANGLADESH', 'CHINESE', 'CHINA', 'PRC',
+        'NEPALESE', 'NEPAL', 'VIETNAMESE', 'VIETNAM', 'THAI', 'THAILAND',
+        'MYANMAR', 'BURMESE', 'FILIPINO', 'PHILIPPINES', 'INDONESIAN', 'INDONESIA',
+        'SRI LANKAN', 'SRI LANKA', 'MALAYSIAN', 'MALAYSIA', 'PAKISTANI', 'PAKISTAN',
+    ];
+
+    for (const pattern of nationalityPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            result.nationality = match[1].trim();
+            break;
+        }
+    }
+    if (!result.nationality) {
+        for (const nat of knownNationalities) {
+            if (text.includes(nat)) {
+                result.nationality = nat;
+                break;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7. SEX
+    // ═══════════════════════════════════════════════════════════
+    const sexMatch = text.match(/SEX\s*[:\-]?\s*(MALE|FEMALE|M|F)\b/);
+    if (sexMatch) {
+        result.sex = sexMatch[1] === 'MALE' ? 'M' : sexMatch[1] === 'FEMALE' ? 'F' : sexMatch[1];
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 8. DATES (DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY)
+    // ═══════════════════════════════════════════════════════════
     const datePattern = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g;
     const dates = [];
     let dateMatch;
@@ -136,94 +344,24 @@ function parseOCRText(rawText, documentType) {
         dates.push(`${year}-${month}-${day}`);
     }
 
-    // ─── Name extraction ──────────────────────────────────
-    // Look for "NAME" label followed by a value
-    const namePatterns = [
-        /NAME\s*[:\-]?\s*([A-Z\s]{3,})/,
-        /NAME\s+OF\s+WORKER\s*[:\-]?\s*([A-Z\s]{3,})/,
-        /WORKER\s*[:\-]?\s*([A-Z\s]{3,})/,
-    ];
-    for (const pattern of namePatterns) {
-        const match = text.match(pattern);
-        if (match) {
-            result.worker_name = match[1].trim().replace(/\s+/g, ' ');
-            break;
-        }
-    }
-
-    // ─── Nationality ──────────────────────────────────────
-    const nationalityPatterns = [
-        /NATIONALITY\s*[:\-]?\s*([A-Z\s]+?)(?:\n|$)/,
-        /COUNTRY\s*[:\-]?\s*([A-Z\s]+?)(?:\n|$)/,
-    ];
-    const knownNationalities = ['INDIAN', 'BANGLADESHI', 'CHINESE', 'NEPALESE', 'VIETNAMESE',
-        'THAI', 'MYANMAR', 'FILIPINO', 'INDONESIAN', 'SRI LANKAN', 'MALAYSIAN', 'PAKISTANI'];
-
-    for (const pattern of nationalityPatterns) {
-        const match = text.match(pattern);
-        if (match) {
-            result.nationality = match[1].trim();
-            break;
-        }
-    }
-    // Fallback: scan for known nationalities
-    if (!result.nationality) {
-        for (const nat of knownNationalities) {
-            if (text.includes(nat)) {
-                result.nationality = nat;
-                break;
-            }
-        }
-    }
-
-    // ─── Sex ──────────────────────────────────────────────
-    const sexMatch = text.match(/SEX\s*[:\-]?\s*(MALE|FEMALE|M|F)\b/);
-    if (sexMatch) {
-        result.sex = sexMatch[1] === 'MALE' ? 'M' : sexMatch[1] === 'FEMALE' ? 'F' : sexMatch[1];
-    }
-
-    // ─── Employer ─────────────────────────────────────────
-    const employerPatterns = [
-        /EMPLOYER\s*[:\-]?\s*([A-Z0-9\s&.,]+?)(?:\n|$)/,
-        /COMPANY\s*[:\-]?\s*([A-Z0-9\s&.,]+?)(?:\n|$)/,
-    ];
-    for (const pattern of employerPatterns) {
-        const match = text.match(pattern);
-        if (match) {
-            result.employer_name = match[1].trim();
-            break;
-        }
-    }
-    // Fallback: look for PTE LTD
-    if (!result.employer_name) {
-        const pteMatch = text.match(/([A-Z0-9\s&.,]+PTE\s*\.?\s*LTD\.?)/);
-        if (pteMatch) result.employer_name = pteMatch[1].trim();
-    }
-
-    // ─── Date assignments ─────────────────────────────────
-    if (documentType === 'certification' || documentType === 'auto') {
-        // Look for specific date labels
-        const issueMatch = text.match(/(?:ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
-        const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
-
-        if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
-        if (expiryMatch) result.expiry_date = formatDate(expiryMatch[1]);
-    }
-
     // DOB
     const dobMatch = text.match(/(?:DATE\s*OF\s*BIRTH|DOB|D\.?O\.?B\.?|BORN)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
     if (dobMatch) {
         result.date_of_birth = formatDate(dobMatch[1]);
-    } else if (dates.length > 0 && !result.date_of_birth) {
-        // Heuristic: earliest date is likely DOB
+    } else if (dates.length > 0) {
         const sorted = [...dates].sort();
         result.date_of_birth = sorted[0];
     }
 
-    // If no specific issue/expiry dates found, use remaining dates
+    // Issue / Expiry dates (for certifications)
+    const issueMatch = text.match(/(?:ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+    const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+
+    if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
+    if (expiryMatch) result.expiry_date = formatDate(expiryMatch[1]);
+
     if (!result.issue_date && !result.expiry_date && dates.length >= 2) {
         const sorted = [...dates].sort();
-        // Skip the DOB date
         const remaining = sorted.filter(d => d !== result.date_of_birth);
         if (remaining.length >= 2) {
             result.issue_date = remaining[0];
@@ -233,7 +371,9 @@ function parseOCRText(rawText, documentType) {
         }
     }
 
-    // ─── Course/Certification ─────────────────────────────
+    // ═══════════════════════════════════════════════════════════
+    // 9. COURSE / CERTIFICATION
+    // ═══════════════════════════════════════════════════════════
     const coursePatterns = [
         /COURSE\s*(?:TITLE)?\s*[:\-]?\s*([A-Z0-9\s\-&()]+?)(?:\n|$)/,
         /CERTIFICATE\s*(?:IN|OF|FOR)?\s*[:\-]?\s*([A-Z0-9\s\-&()]+?)(?:\n|$)/,
@@ -260,6 +400,27 @@ function parseOCRText(rawText, documentType) {
     }
 
     return result;
+}
+
+/**
+ * Clean a name string: remove extra whitespace, trailing junk
+ */
+function cleanName(name) {
+    return name
+        .replace(/\s+/g, ' ')
+        .replace(/[^A-Z\s.'\-\/]/gi, '')
+        .trim();
+}
+
+/**
+ * Check if a string looks like a valid person name (at least 2 words)
+ */
+function isValidName(name) {
+    if (!name || name.length < 3) return false;
+    // Must have at least one space (first + last name)
+    // Or be at least 5 chars (some single-name cultures)
+    const words = name.split(/\s+/).filter(w => w.length > 0);
+    return words.length >= 2 || name.length >= 5;
 }
 
 /**

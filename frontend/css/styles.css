@@ -962,6 +962,10 @@ select.form-control {
   padding: 20px;
 }
 
+.modal-overlay[hidden] {
+  display: none !important;
+}
+
 .modal {
   background: var(--bg-modal);
   border: 1px solid var(--border-color);
