@@ -8,7 +8,7 @@ const API = (() => {
     // In development, the Worker runs on localhost:8787
     const BASE_URL = window.location.hostname === 'localhost'
         ? 'http://localhost:8787'
-        : ''; // Same-origin or set your Worker URL here
+        : 'https://workpass-cert-manager-api.vernonprocess.workers.dev';
 
     async function request(endpoint, options = {}) {
         const url = `${BASE_URL}${endpoint}`;

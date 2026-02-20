@@ -6,7 +6,8 @@ compatibility_date = "2024-12-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "workpass-cert-db"
-database_id = "<YOUR_D1_DATABASE_ID>"   # Replace after running: wrangler d1 create workpass-cert-db
+database_id = "b0e065ea-0395-4ef4-995e-8c6b109d689b"
+migrations_dir = "database/migrations"
 
 # ─── R2 Bucket ──────────────────────────────────────────────
 [[r2_buckets]]
