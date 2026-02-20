@@ -137,14 +137,23 @@ function parseOCRText(rawText, documentType) {
         employer_name: null,
         course_title: null,
         course_provider: null,
+        cert_serial_no: null,
         issue_date: null,
         expiry_date: null,
     };
 
-    // Detect if this is a Work Permit card
+    // Detect document type
     const isWorkPermit = documentType === 'work_permit' ||
         text.includes('WORK PERMIT') ||
         text.includes('EMPLOYMENT OF FOREIGN MANPOWER');
+
+    const isCertification = documentType === 'certification' ||
+        text.includes('COURSE DATE') ||
+        text.includes('COURSE VENUE') ||
+        text.includes('CERTIFICATE') ||
+        text.includes('CERTIFICATION') ||
+        text.includes('TRAINING') ||
+        text.includes('VALIDITY');
 
     // ═══════════════════════════════════════════════════════════
     // 1. FIN NUMBER (the unique identifier)
@@ -153,8 +162,8 @@ function parseOCRText(rawText, documentType) {
     //    G = issued 2000–2021
     //    M = issued from 2022 onwards
     // ═══════════════════════════════════════════════════════════
-    // First try labeled "FIN" pattern
-    const finLabelMatch = text.match(/FIN\s*[:\-]?\s*([FGM]\d{7}[A-Z])/);
+    // First try labeled "FIN" or "ID NO" pattern
+    const finLabelMatch = text.match(/(?:FIN|ID\s*NO\.?)\s*[:\-]?\s*([FGM]\d{7}[A-Z])/);
     if (finLabelMatch) {
         result.fin_number = finLabelMatch[1];
     } else {
@@ -341,34 +350,61 @@ function parseOCRText(rawText, documentType) {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 8. DATES (DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY)
+    // 8. DATES — context-aware routing
+    //    "Course Date" → issue_date (NOT DOB)
+    //    "Date of Birth" / "DOB" → date_of_birth
+    //    "Issue Date" / "Issued" → issue_date
+    //    "Expiry" / "Valid Until" → expiry_date
+    //    "Validity: No Expiry" → expiry_date = 'No Expiry'
     // ═══════════════════════════════════════════════════════════
-    const datePattern = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g;
-    const dates = [];
-    let dateMatch;
-    while ((dateMatch = datePattern.exec(text)) !== null) {
-        const day = dateMatch[1].padStart(2, '0');
-        const month = dateMatch[2].padStart(2, '0');
-        const year = dateMatch[3];
-        dates.push(`${year}-${month}-${day}`);
+
+    // Course Date → issue_date
+    const courseDateMatch = text.match(/COURSE\s*DATE\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+    if (courseDateMatch) {
+        result.issue_date = formatDate(courseDateMatch[1]);
     }
 
-    // DOB
+    // Explicit DOB (only for non-certification docs)
     const dobMatch = text.match(/(?:DATE\s*OF\s*BIRTH|DOB|D\.?O\.?B\.?|BORN)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
     if (dobMatch) {
         result.date_of_birth = formatDate(dobMatch[1]);
-    } else if (dates.length > 0) {
+    }
+
+    // Explicit Issue Date
+    if (!result.issue_date) {
+        const issueMatch = text.match(/(?:ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+        if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
+    }
+
+    // Expiry Date
+    const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP\.?)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+    if (expiryMatch) {
+        result.expiry_date = formatDate(expiryMatch[1]);
+    }
+
+    // "Validity: No Expiry" handling
+    if (!result.expiry_date && text.match(/VALIDITY\s*[:\-]?\s*NO\s*EXPIRY/)) {
+        result.expiry_date = 'No Expiry';
+    }
+
+    // Collect all dates for fallback
+    const datePattern = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g;
+    const dates = [];
+    let dateMatch2;
+    while ((dateMatch2 = datePattern.exec(text)) !== null) {
+        const day = dateMatch2[1].padStart(2, '0');
+        const month = dateMatch2[2].padStart(2, '0');
+        const year = dateMatch2[3];
+        dates.push(`${year}-${month}-${day}`);
+    }
+
+    // Fallback DOB: if this is NOT a certification, use earliest date
+    if (!result.date_of_birth && !isCertification && dates.length > 0) {
         const sorted = [...dates].sort();
         result.date_of_birth = sorted[0];
     }
 
-    // Issue / Expiry dates (for certifications)
-    const issueMatch = text.match(/(?:ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
-    const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
-
-    if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
-    if (expiryMatch) result.expiry_date = formatDate(expiryMatch[1]);
-
+    // Fallback issue/expiry from remaining dates
     if (!result.issue_date && !result.expiry_date && dates.length >= 2) {
         const sorted = [...dates].sort();
         const remaining = sorted.filter(d => d !== result.date_of_birth);
@@ -376,26 +412,92 @@ function parseOCRText(rawText, documentType) {
             result.issue_date = remaining[0];
             result.expiry_date = remaining[remaining.length - 1];
         } else if (remaining.length === 1) {
-            result.expiry_date = remaining[0];
+            if (isCertification) {
+                result.issue_date = remaining[0];
+            } else {
+                result.expiry_date = remaining[0];
+            }
         }
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 9. COURSE / CERTIFICATION
+    // 9. CERT SERIAL NUMBER (S/N)
+    //    e.g. "S/N WAHRC-2025-B134P-659" or "S/N: ABC-123"
     // ═══════════════════════════════════════════════════════════
-    const coursePatterns = [
-        /COURSE\s*(?:TITLE)?\s*[:\-]?\s*([A-Z0-9\s\-&()]+?)(?:\n|$)/,
-        /CERTIFICATE\s*(?:IN|OF|FOR)?\s*[:\-]?\s*([A-Z0-9\s\-&()]+?)(?:\n|$)/,
-        /CERTIFICATION\s*[:\-]?\s*([A-Z0-9\s\-&()]+?)(?:\n|$)/,
+    const snMatch = text.match(/S\/N\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-]+)/);
+    if (snMatch) {
+        result.cert_serial_no = snMatch[1].trim();
+    }
+    // Also check next line after "S/N" label
+    if (!result.cert_serial_no) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/^S\/N\s*$/)) {
+                if (i + 1 < upperLines.length) {
+                    const nextLine = upperLines[i + 1].trim();
+                    if (nextLine.match(/^[A-Z0-9][A-Z0-9\-]+$/)) {
+                        result.cert_serial_no = nextLine;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 10. COURSE TITLE — improved extraction
+    //     Look for known course name patterns (with abbreviations)
+    //     e.g. "Work-At-Height Rescue Course (WAHRC)"
+    // ═══════════════════════════════════════════════════════════
+
+    // Strategy 1: Look for full course name lines with known keywords
+    const courseKeywords = [
+        'COURSE', 'CERTIFICATE', 'CERTIFICATION', 'TRAINING',
+        'SAFETY', 'RESCUE', 'WELDING', 'RIGGING', 'SCAFFOLD',
+        'ELECTRICAL', 'PLUMBING', 'CRANE', 'FORKLIFT', 'HEIGHT',
+        'CORETRADE', 'MULTI-SKILL', 'SEC(K)', 'FIRST AID',
     ];
-    for (const pattern of coursePatterns) {
-        const match = text.match(pattern);
-        if (match) {
-            result.course_title = match[1].trim();
+
+    // Look for lines that contain a known keyword and look like a course title
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const upperLine = upperLines[i];
+
+        // Skip very short lines, date lines, name/ID lines, venue lines
+        if (line.length < 5) continue;
+        if (upperLine.match(/^(NAME|ID\s*NO|FIN|COURSE\s*DATE|COURSE\s*VENUE|VALIDITY|S\/N|DATE|DOB)/)) continue;
+        if (upperLine.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/)) continue;
+        if (upperLine.match(/^[FGM]\d{7}[A-Z]$/)) continue;
+        if (upperLine.match(/SINGAPORE|PIONEER|STREET|AVENUE|ROAD|BLOCK/)) continue;
+        if (upperLine.match(/^MR\.|^MS\.|DIRECTOR|PRINCIPAL|TRAINER|DIVISION/)) continue;
+
+        // Check if this line contains a course keyword
+        const hasKeyword = courseKeywords.some(k => upperLine.includes(k));
+        if (hasKeyword && line.length >= 10) {
+            result.course_title = line.replace(/\s+/g, ' ').trim();
             break;
         }
     }
 
+    // Strategy 2: Regex fallback
+    if (!result.course_title) {
+        const titlePatterns = [
+            /COURSE\s*(?:TITLE)?\s*[:\-]\s*([^\n]{5,})/,
+            /CERTIFICATE\s*(?:IN|OF|FOR)\s*[:\-]?\s*([^\n]{5,})/,
+        ];
+        for (const pattern of titlePatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                result.course_title = match[1].trim();
+                break;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 11. COURSE PROVIDER — improved extraction
+    //     Look for provider names (often multi-line, near top of cert)
+    //     e.g. "Avanta\nGlobal" → "Avanta Global"
+    // ═══════════════════════════════════════════════════════════
     const providerPatterns = [
         /(?:PROVIDER|ISSUED\s*BY|ISSUING\s*(?:BODY|ORG))\s*[:\-]?\s*([A-Z0-9\s&.,]+?)(?:\n|$)/,
         /(?:TRAINING\s*(?:CENTRE|CENTER|PROVIDER))\s*[:\-]?\s*([A-Z0-9\s&.,]+?)(?:\n|$)/,
@@ -405,6 +507,33 @@ function parseOCRText(rawText, documentType) {
         if (match) {
             result.course_provider = match[1].trim();
             break;
+        }
+    }
+
+    // Provider fallback: look for known provider names or multi-word
+    // company-like names near the top (before the course title)
+    if (!result.course_provider && isCertification) {
+        // Look for company-like text before the course title line
+        const courseTitleIdx = result.course_title
+            ? upperLines.findIndex(l => l.includes(result.course_title?.toUpperCase()?.substring(0, 10) || '____'))
+            : upperLines.length;
+
+        // Scan lines before course title for provider-like names
+        const providerCandidates = [];
+        for (let i = 0; i < Math.min(courseTitleIdx, 6); i++) {
+            const line = lines[i]?.trim();
+            if (!line || line.length < 3) continue;
+            // Skip known non-provider lines
+            if (upperLines[i].match(/^(S\/N|WAHRC|CERTIFICATE|COURSE|NAME|ID|FIN|DATE|VALID)/)) continue;
+            if (upperLines[i].match(/^\d/)) continue; // starts with number
+            // Potential provider: short text, looks like a name
+            if (line.length >= 3 && line.length <= 30 && line.match(/^[A-Za-z]/)) {
+                providerCandidates.push(line);
+            }
+        }
+        // Join consecutive short lines that might be a split name
+        if (providerCandidates.length > 0) {
+            result.course_provider = providerCandidates.join(' ').trim();
         }
     }
 

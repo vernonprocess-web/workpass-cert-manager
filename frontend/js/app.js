@@ -187,12 +187,13 @@ const App = (() => {
       if (certTbody) {
         const certs = worker.certifications || [];
         if (certs.length === 0) {
-          certTbody.innerHTML = '<tr><td colspan="4" class="empty-state">No certifications</td></tr>';
+          certTbody.innerHTML = '<tr><td colspan="5" class="empty-state">No certifications</td></tr>';
         } else {
           certTbody.innerHTML = certs.map(c => `
                         <tr>
                             <td>${esc(c.course_title)}</td>
                             <td>${esc(c.course_provider || '—')}</td>
+                            <td>${esc(c.cert_serial_no || '—')}</td>
                             <td>${esc(c.issue_date || '—')}</td>
                             <td>${expiryBadge(c.expiry_date)}</td>
                         </tr>
@@ -233,7 +234,7 @@ const App = (() => {
       const certs = result.data || [];
 
       if (certs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No certifications found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No certifications found</td></tr>';
       } else {
         tbody.innerHTML = certs.map(c => `
                     <tr>
@@ -241,6 +242,7 @@ const App = (() => {
                         <td>${esc(c.fin_number || '—')}</td>
                         <td>${esc(c.course_title)}</td>
                         <td>${esc(c.course_provider || '—')}</td>
+                        <td>${esc(c.cert_serial_no || '—')}</td>
                         <td>${esc(c.issue_date || '—')}</td>
                         <td>${expiryBadge(c.expiry_date)}</td>
                         <td>
@@ -256,7 +258,7 @@ const App = (() => {
 
       renderPagination('certs-pagination', result.pagination, (p) => { certsPage = p; loadCertifications(); });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
     }
   }
 
@@ -449,6 +451,7 @@ const App = (() => {
       setInputValue('ocr-employer', merged.employer_name || '');
       setInputValue('ocr-course', merged.course_title || '');
       setInputValue('ocr-provider', merged.course_provider || '');
+      setInputValue('ocr-cert-sn', merged.cert_serial_no || '');
       setInputValue('ocr-issue-date', merged.issue_date || '');
       setInputValue('ocr-expiry-date', merged.expiry_date || '');
 
@@ -518,6 +521,7 @@ const App = (() => {
             fin_number: fin,
             course_title: courseTitle,
             course_provider: document.getElementById('ocr-provider')?.value?.trim() || null,
+            cert_serial_no: document.getElementById('ocr-cert-sn')?.value?.trim() || null,
             issue_date: document.getElementById('ocr-issue-date')?.value || null,
             expiry_date: document.getElementById('ocr-expiry-date')?.value || null,
           });
@@ -595,11 +599,11 @@ const App = (() => {
             </div>
             <div class="form-group">
                 <label for="modal-cert-title">Course Title *</label>
-                <input type="text" id="modal-cert-title" class="form-control" placeholder="e.g. CoreTrade for Welding">
+                <input type="text" id="modal-cert-title" class="form-control" placeholder="e.g. Work-At-Height Rescue Course (WAHRC)">
             </div>
-            <div class="form-group">
-                <label for="modal-cert-provider">Course Provider</label>
-                <input type="text" id="modal-cert-provider" class="form-control" placeholder="e.g. BCA">
+            <div class="form-row">
+                <div class="form-group"><label for="modal-cert-provider">Course Provider</label><input type="text" id="modal-cert-provider" class="form-control" placeholder="e.g. Avanta Global"></div>
+                <div class="form-group"><label for="modal-cert-sn">Course S/N</label><input type="text" id="modal-cert-sn" class="form-control" placeholder="e.g. WAHRC-2025-B134P-659"></div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label for="modal-cert-issue">Issue Date</label><input type="date" id="modal-cert-issue" class="form-control"></div>
@@ -621,6 +625,7 @@ const App = (() => {
           fin_number: fin,
           course_title: title,
           course_provider: document.getElementById('modal-cert-provider')?.value?.trim() || null,
+          cert_serial_no: document.getElementById('modal-cert-sn')?.value?.trim() || null,
           issue_date: document.getElementById('modal-cert-issue')?.value || null,
           expiry_date: document.getElementById('modal-cert-expiry')?.value || null,
         });

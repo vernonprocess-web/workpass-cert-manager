@@ -39,7 +39,7 @@ export async function handleCertifications(request, env, path) {
  */
 async function createCertification(request, env) {
     const body = await request.json();
-    const { worker_id, fin_number, course_title, course_provider, issue_date, expiry_date } = body;
+    const { worker_id, fin_number, course_title, course_provider, cert_serial_no, issue_date, expiry_date } = body;
 
     if (!course_title) {
         return errorResponse('course_title is required', 400);
@@ -67,12 +67,13 @@ async function createCertification(request, env) {
     }
 
     const result = await env.DB.prepare(`
-        INSERT INTO certifications (worker_id, course_title, course_provider, issue_date, expiry_date)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO certifications (worker_id, course_title, course_provider, cert_serial_no, issue_date, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?)
     `).bind(
         resolvedWorkerId,
         course_title.trim(),
         course_provider ? course_provider.trim() : null,
+        cert_serial_no ? cert_serial_no.trim() : null,
         issue_date || null,
         expiry_date || null
     ).run();

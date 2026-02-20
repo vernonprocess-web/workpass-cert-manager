@@ -259,13 +259,14 @@
                 <tr>
                   <th>Course</th>
                   <th>Provider</th>
+                  <th>S/N</th>
                   <th>Issue</th>
                   <th>Expiry</th>
                 </tr>
               </thead>
               <tbody id="profile-certs-tbody">
                 <tr>
-                  <td colspan="4" class="empty-state">—</td>
+                  <td colspan="5" class="empty-state">—</td>
                 </tr>
               </tbody>
             </table>
@@ -380,15 +381,19 @@
               <h4 class="ocr-section-title">Certification (if applicable)</h4>
               <div class="form-row">
                 <div class="form-group"><label for="ocr-course">Course Title</label><input type="text" id="ocr-course"
-                    class="form-control"></div>
+                    class="form-control" placeholder="e.g. Work-At-Height Rescue Course (WAHRC)"></div>
                 <div class="form-group"><label for="ocr-provider">Course Provider</label><input type="text"
-                    id="ocr-provider" class="form-control"></div>
+                    id="ocr-provider" class="form-control" placeholder="e.g. Avanta Global"></div>
               </div>
               <div class="form-row">
-                <div class="form-group"><label for="ocr-issue-date">Issue Date</label><input type="date"
-                    id="ocr-issue-date" class="form-control"></div>
-                <div class="form-group"><label for="ocr-expiry-date">Expiry Date</label><input type="date"
-                    id="ocr-expiry-date" class="form-control"></div>
+                <div class="form-group"><label for="ocr-cert-sn">Course S/N</label><input type="text" id="ocr-cert-sn"
+                    class="form-control" placeholder="e.g. WAHRC-2025-B134P-659"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-issue-date">Issue Date (Course Date)</label><input type="text"
+                    id="ocr-issue-date" class="form-control" placeholder="yyyy-mm-dd"></div>
+                <div class="form-group"><label for="ocr-expiry-date">Expiry Date</label><input type="text"
+                    id="ocr-expiry-date" class="form-control" placeholder="yyyy-mm-dd or No Expiry"></div>
               </div>
             </div>
             <div class="ocr-actions">
@@ -430,6 +435,7 @@
                 <th>FIN</th>
                 <th>Course Title</th>
                 <th>Provider</th>
+                <th>S/N</th>
                 <th>Issue Date</th>
                 <th>Expiry Date</th>
                 <th>Actions</th>
@@ -437,7 +443,7 @@
             </thead>
             <tbody id="certs-tbody">
               <tr>
-                <td colspan="7" class="empty-state">Loading...</td>
+                <td colspan="8" class="empty-state">Loading...</td>
               </tr>
             </tbody>
           </table>
