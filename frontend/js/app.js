@@ -84,11 +84,12 @@ const App = (() => {
       const tbody = document.getElementById('dashboard-workers-tbody');
       if (tbody && stats.recent_workers) {
         if (stats.recent_workers.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No workers yet. Upload a work permit to get started.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No workers yet. Upload a work permit to get started.</td></tr>';
         } else {
           tbody.innerHTML = stats.recent_workers.map(w => `
                         <tr style="cursor:pointer" onclick="Router.navigate('worker-profile','${w.id}')">
                             <td><strong>${esc(w.fin_number)}</strong></td>
+                            <td>${esc(w.work_permit_no || '—')}</td>
                             <td>${esc(w.worker_name)}</td>
                             <td>${esc(w.employer_name || '—')}</td>
                             <td>${esc(w.nationality || '—')}</td>
@@ -117,11 +118,12 @@ const App = (() => {
       const workers = result.data || [];
 
       if (workers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No workers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No workers found</td></tr>';
       } else {
         tbody.innerHTML = workers.map(w => `
                     <tr>
                         <td><strong style="color:var(--accent-primary);cursor:pointer" onclick="Router.navigate('worker-profile','${w.id}')">${esc(w.fin_number)}</strong></td>
+                        <td>${esc(w.work_permit_no || '—')}</td>
                         <td>${esc(w.worker_name)}</td>
                         <td>${esc(w.date_of_birth || '—')}</td>
                         <td>${esc(w.nationality || '—')}</td>
@@ -143,7 +145,7 @@ const App = (() => {
 
       renderPagination('workers-pagination', result.pagination, (p) => { workersPage = p; loadWorkers(); });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
     }
   }
 
@@ -165,6 +167,7 @@ const App = (() => {
 
       detailsEl.innerHTML = `
                 <div class="profile-field"><span class="profile-field-label">FIN Number</span><span class="profile-field-value">${esc(worker.fin_number)}</span></div>
+                <div class="profile-field"><span class="profile-field-label">Work Permit No</span><span class="profile-field-value">${esc(worker.work_permit_no || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Worker Name</span><span class="profile-field-value">${esc(worker.worker_name)}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Date of Birth</span><span class="profile-field-value">${esc(worker.date_of_birth || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Nationality</span><span class="profile-field-value">${esc(worker.nationality || '—')}</span></div>
@@ -373,6 +376,7 @@ const App = (() => {
       // Populate OCR fields
       const ext = result.extracted || {};
       setInputValue('ocr-fin', ext.fin_number || '');
+      setInputValue('ocr-wp-no', ext.work_permit_no || '');
       setInputValue('ocr-name', ext.worker_name || '');
       setInputValue('ocr-dob', ext.date_of_birth || '');
       setInputValue('ocr-nationality', ext.nationality || '');
@@ -417,6 +421,7 @@ const App = (() => {
       // Step 1: Create/update worker
       const workerData = {
         fin_number: fin,
+        work_permit_no: document.getElementById('ocr-wp-no')?.value?.trim() || null,
         worker_name: name,
         date_of_birth: document.getElementById('ocr-dob')?.value || null,
         nationality: document.getElementById('ocr-nationality')?.value || null,
@@ -473,6 +478,9 @@ const App = (() => {
     openModal('Add Worker', `
             <div class="form-row">
                 <div class="form-group"><label for="modal-fin">FIN Number *</label><input type="text" id="modal-fin" class="form-control" placeholder="e.g. G1234567A"></div>
+                <div class="form-group"><label for="modal-wp-no">Work Permit No</label><input type="text" id="modal-wp-no" class="form-control" placeholder="e.g. 034773262"></div>
+            </div>
+            <div class="form-row">
                 <div class="form-group"><label for="modal-name">Worker Name *</label><input type="text" id="modal-name" class="form-control" placeholder="Full name"></div>
             </div>
             <div class="form-row">
@@ -496,6 +504,7 @@ const App = (() => {
       try {
         await API.createWorker({
           fin_number: fin,
+          work_permit_no: document.getElementById('modal-wp-no')?.value?.trim() || null,
           worker_name: name,
           date_of_birth: document.getElementById('modal-dob')?.value || null,
           nationality: document.getElementById('modal-nat')?.value || null,

@@ -106,14 +106,21 @@ async function processOCR(request, env) {
  *
  * Singapore Work Permit (Front) typical layout:
  *   WORK PERMIT
- *   Employment of Foreign Manpower Act (Chapter 91A)
- *   Employer
- *   COMPANY NAME PTE. LTD.
- *   Name
- *   WORKER FULL NAME
- *   Work Permit No.    Sector
- *   0 34773262         CONSTRUCTION
- *   [FIN number may appear near barcode, e.g. K3358575]
+ *   Employer: COMPANY NAME PTE. LTD.
+ *   Name: WORKER FULL NAME
+ *   Work Permit No: 034773262    Sector: CONSTRUCTION
+ *
+ * Singapore Visit Pass / Back of WP typical layout:
+ *   VISIT PASS
+ *   Name: WORKER FULL NAME
+ *   FIN: G6550858W
+ *   Date of Birth: 16-06-1988    Sex: M
+ *   Nationality: INDIAN
+ *
+ * FIN format: F/G/M + 7 digits + letter (e.g. G6550858W)
+ *   F = issued before 2000
+ *   G = issued 2000–2021
+ *   M = issued from 2022 onwards
  */
 function parseOCRText(rawText, documentType) {
     const text = rawText.toUpperCase();
@@ -123,6 +130,7 @@ function parseOCRText(rawText, documentType) {
     const result = {
         worker_name: null,
         fin_number: null,
+        work_permit_no: null,
         date_of_birth: null,
         nationality: null,
         sex: null,
@@ -139,58 +147,59 @@ function parseOCRText(rawText, documentType) {
         text.includes('EMPLOYMENT OF FOREIGN MANPOWER');
 
     // ═══════════════════════════════════════════════════════════
-    // 1. WORK PERMIT NUMBER
-    //    Singapore format: typically 8-9 digits, sometimes
-    //    printed with spaces like "0 34773262"
+    // 1. FIN NUMBER (the unique identifier)
+    //    Singapore FIN: F, G, or M + 7 digits + check letter
+    //    F = issued before 2000
+    //    G = issued 2000–2021
+    //    M = issued from 2022 onwards
+    // ═══════════════════════════════════════════════════════════
+    // First try labeled "FIN" pattern
+    const finLabelMatch = text.match(/FIN\s*[:\-]?\s*([FGM]\d{7}[A-Z])/);
+    if (finLabelMatch) {
+        result.fin_number = finLabelMatch[1];
+    } else {
+        // Scan for any FIN-format string in the text
+        const finMatch = text.match(/\b([FGM]\d{7}[A-Z])\b/);
+        if (finMatch) {
+            result.fin_number = finMatch[1];
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. WORK PERMIT NUMBER (separate from FIN)
+    //    Typically 8-9 digits, printed with spaces like "0 34773262"
+    //    Found on the front of the Work Permit card
     // ═══════════════════════════════════════════════════════════
     const wpPatterns = [
-        // "Work Permit No" followed by number on same or next line
         /WORK\s*PERMIT\s*NO\.?\s*:?\s*(\d[\d\s]{6,})/i,
-        // Number after "WP No" 
         /WP\s*NO\.?\s*:?\s*(\d[\d\s]{6,})/i,
+        /PERMIT\s*NO\.?\s*:?\s*(\d[\d\s]{6,})/i,
     ];
 
     for (const pattern of wpPatterns) {
         const match = text.match(pattern);
         if (match) {
-            // Remove spaces from the number
-            result.fin_number = match[1].replace(/\s+/g, '').trim();
+            result.work_permit_no = match[1].replace(/\s+/g, '').trim();
             break;
         }
     }
 
     // If "Work Permit No" label found but number is on the next line
-    if (!result.fin_number) {
+    if (!result.work_permit_no) {
         for (let i = 0; i < upperLines.length; i++) {
             if (upperLines[i].match(/WORK\s*PERMIT\s*NO/)) {
-                // Check if there's a number on the same line after the label
                 const sameLine = upperLines[i].match(/WORK\s*PERMIT\s*NO\.?\s*:?\s*(\d[\d\s]+)/);
                 if (sameLine) {
-                    result.fin_number = sameLine[1].replace(/\s+/g, '').trim();
+                    result.work_permit_no = sameLine[1].replace(/\s+/g, '').trim();
                 } else if (i + 1 < upperLines.length) {
-                    // Next line should have the number
                     const nextLine = upperLines[i + 1].trim();
                     const numMatch = nextLine.match(/^(\d[\d\s]{5,})/);
                     if (numMatch) {
-                        result.fin_number = numMatch[1].replace(/\s+/g, '').trim();
+                        result.work_permit_no = numMatch[1].replace(/\s+/g, '').trim();
                     }
                 }
                 break;
             }
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // 2. FIN NUMBER (e.g., G1234567A, K3358575)
-    //    Singapore FIN: starts with F, G, M, S, T, or K
-    //    followed by 7 digits and a letter
-    // ═══════════════════════════════════════════════════════════
-    const finMatch = text.match(/\b([FGMSTK]\d{7}[A-Z])\b/);
-    if (finMatch) {
-        // If we already found a WP number, store FIN separately;
-        // otherwise use FIN as the primary identifier
-        if (!result.fin_number) {
-            result.fin_number = finMatch[1];
         }
     }
 

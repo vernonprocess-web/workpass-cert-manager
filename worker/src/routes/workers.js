@@ -50,7 +50,7 @@ export async function handleWorkers(request, env, path) {
  */
 async function upsertWorker(request, env) {
     const body = await request.json();
-    const { fin_number, worker_name, date_of_birth, nationality, sex, employer_name } = body;
+    const { fin_number, worker_name, work_permit_no, date_of_birth, nationality, sex, employer_name } = body;
 
     if (!fin_number || !worker_name) {
         return errorResponse('fin_number and worker_name are required', 400);
@@ -72,6 +72,7 @@ async function upsertWorker(request, env) {
         await env.DB.prepare(`
             UPDATE workers SET
                 worker_name = ?,
+                work_permit_no = COALESCE(?, work_permit_no),
                 date_of_birth = COALESCE(?, date_of_birth),
                 nationality = COALESCE(?, nationality),
                 sex = COALESCE(?, sex),
@@ -80,6 +81,7 @@ async function upsertWorker(request, env) {
             WHERE fin_number = ?
         `).bind(
             cleanName,
+            work_permit_no ? work_permit_no.trim() : null,
             date_of_birth || null,
             nationality ? nationality.toUpperCase().trim() : null,
             sex ? sex.toUpperCase().trim() : null,
@@ -91,11 +93,12 @@ async function upsertWorker(request, env) {
     } else {
         // Create new worker
         const result = await env.DB.prepare(`
-            INSERT INTO workers (fin_number, worker_name, date_of_birth, nationality, sex, employer_name)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO workers (fin_number, worker_name, work_permit_no, date_of_birth, nationality, sex, employer_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `).bind(
             cleanFin,
             cleanName,
+            work_permit_no ? work_permit_no.trim() : null,
             date_of_birth || null,
             nationality ? nationality.toUpperCase().trim() : null,
             sex ? sex.toUpperCase().trim() : null,
@@ -202,9 +205,9 @@ async function listWorkers(request, env) {
     const params = [];
 
     if (search) {
-        query += ' AND (worker_name LIKE ? OR fin_number LIKE ? OR employer_name LIKE ?)';
+        query += ' AND (worker_name LIKE ? OR fin_number LIKE ? OR work_permit_no LIKE ? OR employer_name LIKE ?)';
         const term = `%${search}%`;
-        params.push(term, term, term);
+        params.push(term, term, term, term);
     }
 
     // Count
