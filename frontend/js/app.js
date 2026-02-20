@@ -5,7 +5,7 @@
 const App = (() => {
   // ─── State ──────────────────────────────────────────────
   let currentWorkerProfile = null;
-  let ocrFile = null;
+  let ocrFiles = [];
   let ocrResult = null;
   let workersPage = 1;
   let certsPage = 1;
@@ -53,6 +53,12 @@ const App = (() => {
 
     // OCR Upload
     initOCRUpload();
+
+    // Hidden file input for "Add More"
+    document.getElementById('ocr-add-more')?.addEventListener('click', () => {
+      if (ocrFiles.length >= 4) { showToast('Maximum 4 images allowed', 'error'); return; }
+      document.getElementById('ocr-file-input')?.click();
+    });
   }
 
   // ─── Router callback ────────────────────────────────────
@@ -260,7 +266,7 @@ const App = (() => {
   function initOCRUpload() {
     const zone = document.getElementById('ocr-upload-zone');
     const fileInput = document.getElementById('ocr-file-input');
-    const removeBtn = document.getElementById('ocr-remove-file');
+    const removeAllBtn = document.getElementById('ocr-remove-all');
     const runBtn = document.getElementById('btn-run-ocr');
     const backBtn = document.getElementById('btn-ocr-back');
     const saveBtn = document.getElementById('btn-ocr-save');
@@ -269,20 +275,21 @@ const App = (() => {
     // Click to upload
     zone?.addEventListener('click', () => fileInput?.click());
 
-    // Drag and drop
+    // Drag and drop (accept multiple)
     zone?.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
     zone?.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
     zone?.addEventListener('drop', (e) => {
       e.preventDefault();
       zone.classList.remove('drag-over');
-      if (e.dataTransfer.files.length > 0) handleOCRFile(e.dataTransfer.files[0]);
+      handleOCRFiles(Array.from(e.dataTransfer.files));
     });
 
     fileInput?.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) handleOCRFile(e.target.files[0]);
+      handleOCRFiles(Array.from(e.target.files));
+      e.target.value = ''; // reset so same file can be re-selected
     });
 
-    removeBtn?.addEventListener('click', resetOCR);
+    removeAllBtn?.addEventListener('click', resetOCR);
     runBtn?.addEventListener('click', runOCR);
     backBtn?.addEventListener('click', () => {
       document.getElementById('upload-step-2').hidden = true;
@@ -299,37 +306,76 @@ const App = (() => {
     });
   }
 
-  function handleOCRFile(file) {
-    if (!file.type.startsWith('image/')) {
-      showToast('Please upload an image file', 'error');
-      return;
+  function handleOCRFiles(files) {
+    for (const file of files) {
+      if (ocrFiles.length >= 4) {
+        showToast('Maximum 4 images allowed', 'error');
+        break;
+      }
+      if (!file.type.startsWith('image/')) {
+        showToast(`"${file.name}" is not an image — skipped`, 'error');
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        showToast(`"${file.name}" exceeds 10MB — skipped`, 'error');
+        continue;
+      }
+      ocrFiles.push(file);
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('File too large. Maximum 10MB.', 'error');
-      return;
-    }
+    renderOCRThumbnails();
+  }
 
-    ocrFile = file;
+  function renderOCRThumbnails() {
+    const grid = document.getElementById('ocr-thumbnails-grid');
     const preview = document.getElementById('ocr-preview-container');
-    const img = document.getElementById('ocr-preview-img');
     const zone = document.getElementById('ocr-upload-zone');
+    const runBtn = document.getElementById('btn-run-ocr');
 
-    if (img && preview && zone) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target.result;
-        preview.hidden = false;
-        zone.style.display = 'none';
-      };
-      reader.readAsDataURL(file);
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (ocrFiles.length === 0) {
+      if (preview) preview.hidden = true;
+      if (zone) zone.style.display = '';
+      if (runBtn) runBtn.disabled = true;
+      return;
     }
 
-    const runBtn = document.getElementById('btn-run-ocr');
+    if (preview) preview.hidden = false;
+    if (zone) zone.style.display = 'none';
     if (runBtn) runBtn.disabled = false;
+
+    ocrFiles.forEach((file, idx) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'ocr-thumb';
+
+      const img = document.createElement('img');
+      img.alt = file.name;
+      const reader = new FileReader();
+      reader.onload = (e) => { img.src = e.target.result; };
+      reader.readAsDataURL(file);
+
+      const label = document.createElement('div');
+      label.className = 'ocr-thumb-label';
+      label.textContent = `Image ${idx + 1}`;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'ocr-thumb-remove';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove this image';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        ocrFiles.splice(idx, 1);
+        renderOCRThumbnails();
+      });
+
+      thumb.append(img, label, removeBtn);
+      grid.appendChild(thumb);
+    });
   }
 
   function resetOCR() {
-    ocrFile = null;
+    ocrFiles = [];
     ocrResult = null;
 
     const preview = document.getElementById('ocr-preview-container');
@@ -339,6 +385,7 @@ const App = (() => {
     const runBtn = document.getElementById('btn-run-ocr');
     const progress = document.getElementById('ocr-progress');
     const fileInput = document.getElementById('ocr-file-input');
+    const grid = document.getElementById('ocr-thumbnails-grid');
 
     if (preview) preview.hidden = true;
     if (zone) zone.style.display = '';
@@ -347,10 +394,11 @@ const App = (() => {
     if (runBtn) runBtn.disabled = true;
     if (progress) progress.hidden = true;
     if (fileInput) fileInput.value = '';
+    if (grid) grid.innerHTML = '';
   }
 
   async function runOCR() {
-    if (!ocrFile) return;
+    if (ocrFiles.length === 0) return;
 
     const runBtn = document.getElementById('btn-run-ocr');
     const progress = document.getElementById('ocr-progress');
@@ -359,43 +407,60 @@ const App = (() => {
 
     if (runBtn) runBtn.disabled = true;
     if (progress) progress.hidden = false;
-    if (progressFill) progressFill.style.width = '30%';
-    if (progressText) progressText.textContent = 'Sending to OCR engine...';
 
     try {
       const docType = document.getElementById('ocr-doc-type')?.value || 'auto';
-      if (progressFill) progressFill.style.width = '60%';
-      if (progressText) progressText.textContent = 'Processing image...';
+      const totalFiles = ocrFiles.length;
+      const merged = {};
+      let allRawText = '';
 
-      const result = await API.processOCR(ocrFile, docType);
-      ocrResult = result;
+      // Process each image
+      for (let i = 0; i < totalFiles; i++) {
+        const pct = Math.round(((i) / totalFiles) * 80 + 10);
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (progressText) progressText.textContent = `Processing image ${i + 1} of ${totalFiles}...`;
+
+        const result = await API.processOCR(ocrFiles[i], docType);
+        const ext = result.extracted || {};
+
+        // Accumulate raw text
+        allRawText += `── Image ${i + 1} ──\n${result.raw_text || '(no text)'}\n\n`;
+
+        // Merge: later values fill in blanks (don't overwrite existing values)
+        for (const [key, value] of Object.entries(ext)) {
+          if (value && !merged[key]) {
+            merged[key] = value;
+          }
+        }
+      }
+
+      ocrResult = { extracted: merged, raw_text: allRawText };
 
       if (progressFill) progressFill.style.width = '100%';
-      if (progressText) progressText.textContent = 'Done!';
+      if (progressText) progressText.textContent = `Done! Processed ${totalFiles} image${totalFiles > 1 ? 's' : ''}.`;
 
-      // Populate OCR fields
-      const ext = result.extracted || {};
-      setInputValue('ocr-fin', ext.fin_number || '');
-      setInputValue('ocr-wp-no', ext.work_permit_no || '');
-      setInputValue('ocr-name', ext.worker_name || '');
-      setInputValue('ocr-dob', ext.date_of_birth || '');
-      setInputValue('ocr-nationality', ext.nationality || '');
-      setInputValue('ocr-sex', ext.sex || '');
-      setInputValue('ocr-employer', ext.employer_name || '');
-      setInputValue('ocr-course', ext.course_title || '');
-      setInputValue('ocr-provider', ext.course_provider || '');
-      setInputValue('ocr-issue-date', ext.issue_date || '');
-      setInputValue('ocr-expiry-date', ext.expiry_date || '');
+      // Populate OCR fields with merged data
+      setInputValue('ocr-fin', merged.fin_number || '');
+      setInputValue('ocr-wp-no', merged.work_permit_no || '');
+      setInputValue('ocr-name', merged.worker_name || '');
+      setInputValue('ocr-dob', merged.date_of_birth || '');
+      setInputValue('ocr-nationality', merged.nationality || '');
+      setInputValue('ocr-sex', merged.sex || '');
+      setInputValue('ocr-employer', merged.employer_name || '');
+      setInputValue('ocr-course', merged.course_title || '');
+      setInputValue('ocr-provider', merged.course_provider || '');
+      setInputValue('ocr-issue-date', merged.issue_date || '');
+      setInputValue('ocr-expiry-date', merged.expiry_date || '');
 
       // Show raw text
       const rawTextEl = document.getElementById('ocr-raw-text');
-      if (rawTextEl) rawTextEl.textContent = result.raw_text || '(no text)';
+      if (rawTextEl) rawTextEl.textContent = allRawText.trim();
 
       // Show step 2
       setTimeout(() => {
         document.getElementById('upload-step-1').hidden = true;
         document.getElementById('upload-step-2').hidden = false;
-        showToast('OCR extraction complete. Review and edit the fields below.', 'success');
+        showToast(`OCR complete — ${totalFiles} image${totalFiles > 1 ? 's' : ''} processed and merged.`, 'success');
       }, 500);
 
     } catch (err) {
@@ -432,15 +497,17 @@ const App = (() => {
       const worker = await API.createWorker(workerData);
       showToast(`Worker ${worker.worker_name} saved!`, 'success');
 
-      // Step 2: Upload the document to R2 linked to this worker
-      if (ocrFile) {
-        try {
-          const docType = document.getElementById('ocr-doc-type')?.value || 'other';
-          await API.uploadWorkerDocument(ocrFile, fin, docType);
-          showToast('Document uploaded to R2', 'success');
-        } catch (err) {
-          showToast('Document upload failed: ' + err.message, 'error');
+      // Step 2: Upload all documents to R2 linked to this worker
+      if (ocrFiles.length > 0) {
+        const docType = document.getElementById('ocr-doc-type')?.value || 'other';
+        for (let i = 0; i < ocrFiles.length; i++) {
+          try {
+            await API.uploadWorkerDocument(ocrFiles[i], fin, docType);
+          } catch (err) {
+            showToast(`Upload failed for image ${i + 1}: ${err.message}`, 'error');
+          }
         }
+        showToast(`${ocrFiles.length} document${ocrFiles.length > 1 ? 's' : ''} uploaded to R2`, 'success');
       }
 
       // Step 3: Create certification if course info provided

@@ -312,13 +312,16 @@
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              <h3>Drag &amp; drop image here</h3>
-              <p>Supports JPEG, PNG, WebP • Max 10MB</p>
-              <input type="file" id="ocr-file-input" accept="image/*" hidden>
+              <h3>Drag &amp; drop images here</h3>
+              <p>Upload up to 4 images (front, back, certificates) • JPEG, PNG, WebP • Max 10MB each</p>
+              <input type="file" id="ocr-file-input" accept="image/*" multiple hidden>
             </div>
-            <div id="ocr-preview-container" class="ocr-preview" hidden>
-              <img id="ocr-preview-img" alt="Preview">
-              <button class="btn btn-secondary btn-sm" id="ocr-remove-file">✕ Remove</button>
+            <div id="ocr-preview-container" class="ocr-thumbnails" hidden>
+              <div id="ocr-thumbnails-grid" class="ocr-thumbnails-grid"></div>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn btn-secondary btn-sm" id="ocr-add-more">+ Add More</button>
+                <button class="btn btn-secondary btn-sm" id="ocr-remove-all">✕ Remove All</button>
+              </div>
             </div>
             <button class="btn btn-primary btn-block" id="btn-run-ocr" disabled style="margin-top:16px">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
