@@ -1,12 +1,13 @@
 /**
- * WorkPass Cert Manager — Cloudflare Worker Entry Point
+ * WorkPass & Cert Manager — Cloudflare Worker Entry Point
  * Routes all incoming requests to the appropriate handler.
  */
 
 import { handleCors, addCorsHeaders } from './middleware/cors.js';
 import { handleWorkers } from './routes/workers.js';
-import { handleCertificates } from './routes/certificates.js';
-import { handleUpload } from './routes/upload.js';
+import { handleCertifications } from './routes/certifications.js';
+import { handleDocuments } from './routes/documents.js';
+import { handleOCR } from './routes/ocr.js';
 import { jsonResponse, errorResponse } from './utils/response.js';
 
 export default {
@@ -23,26 +24,31 @@ export default {
             let response;
 
             // ─── API Routes ──────────────────────────────────────
-            if (path.startsWith('/api/workers')) {
+            if (path.startsWith('/api/ocr')) {
+                response = await handleOCR(request, env, path);
+            } else if (path.startsWith('/api/workers')) {
                 response = await handleWorkers(request, env, path);
-            } else if (path.startsWith('/api/certificates')) {
-                response = await handleCertificates(request, env, path);
-            } else if (path.startsWith('/api/upload') || path.startsWith('/api/files')) {
-                response = await handleUpload(request, env, path);
+            } else if (path.startsWith('/api/certifications')) {
+                response = await handleCertifications(request, env, path);
+            } else if (path.startsWith('/api/documents') || path.startsWith('/api/files')) {
+                response = await handleDocuments(request, env, path);
             } else if (path === '/api/stats') {
                 response = await handleStats(request, env);
             } else if (path === '/api/health') {
-                response = jsonResponse({ status: 'ok', timestamp: new Date().toISOString() });
+                response = jsonResponse({
+                    status: 'ok',
+                    system: 'workpass-cert-manager',
+                    timestamp: new Date().toISOString(),
+                });
             } else {
                 response = errorResponse('Not Found', 404);
             }
 
-            // Add CORS headers to all responses
             return addCorsHeaders(response, env);
         } catch (err) {
-            console.error('Unhandled error:', err);
+            console.error('Unhandled error:', err.message, err.stack);
             return addCorsHeaders(
-                errorResponse('Internal Server Error', 500),
+                errorResponse('Internal Server Error: ' + err.message, 500),
                 env
             );
         }
@@ -57,34 +63,45 @@ async function handleStats(request, env) {
         return errorResponse('Method Not Allowed', 405);
     }
 
-    const totalWorkers = await env.DB.prepare('SELECT COUNT(*) as count FROM workers').first('count');
-    const activeWorkers = await env.DB.prepare("SELECT COUNT(*) as count FROM workers WHERE permit_status = 'active'").first('count');
-    const expiredWorkers = await env.DB.prepare("SELECT COUNT(*) as count FROM workers WHERE permit_status = 'expired'").first('count');
-    const totalCerts = await env.DB.prepare('SELECT COUNT(*) as count FROM certificates').first('count');
-    const validCerts = await env.DB.prepare("SELECT COUNT(*) as count FROM certificates WHERE cert_status = 'valid'").first('count');
-    const expiredCerts = await env.DB.prepare("SELECT COUNT(*) as count FROM certificates WHERE cert_status = 'expired'").first('count');
-
-    // Expiring soon (within 90 days)
-    const expiringSoon = await env.DB.prepare(
-        "SELECT COUNT(*) as count FROM workers WHERE permit_status = 'active' AND expiry_date <= date('now', '+90 days') AND expiry_date >= date('now')"
+    const totalWorkers = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM workers'
     ).first('count');
 
+    const totalCerts = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM certifications'
+    ).first('count');
+
+    const totalDocs = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM documents'
+    ).first('count');
+
+    // Certs expiring within 90 days
     const certsExpiringSoon = await env.DB.prepare(
-        "SELECT COUNT(*) as count FROM certificates WHERE cert_status = 'valid' AND expiry_date <= date('now', '+90 days') AND expiry_date >= date('now')"
+        "SELECT COUNT(*) as count FROM certifications WHERE expiry_date <= date('now', '+90 days') AND expiry_date >= date('now')"
     ).first('count');
+
+    // Certs already expired
+    const certsExpired = await env.DB.prepare(
+        "SELECT COUNT(*) as count FROM certifications WHERE expiry_date < date('now')"
+    ).first('count');
+
+    // Recent workers (last 5)
+    const { results: recentWorkers } = await env.DB.prepare(
+        'SELECT id, fin_number, worker_name, employer_name, created_at FROM workers ORDER BY created_at DESC LIMIT 5'
+    ).all();
 
     return jsonResponse({
         workers: {
             total: totalWorkers,
-            active: activeWorkers,
-            expired: expiredWorkers,
-            expiring_soon: expiringSoon,
         },
-        certificates: {
+        certifications: {
             total: totalCerts,
-            valid: validCerts,
-            expired: expiredCerts,
             expiring_soon: certsExpiringSoon,
+            expired: certsExpired,
         },
+        documents: {
+            total: totalDocs,
+        },
+        recent_workers: recentWorkers,
     });
 }

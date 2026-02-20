@@ -15,6 +15,10 @@ binding = "BUCKET"
 bucket_name = "workpass-cert-files"
 
 # ─── Environment Variables ──────────────────────────────────
+# Note: GOOGLE_VISION_API_KEY and GOOGLE_SHEETS_API_KEY
+# should be set as secrets via: wrangler secret put <KEY_NAME>
+# Do NOT put actual API keys in this file.
+
 [vars]
 ENVIRONMENT = "production"
 CORS_ORIGIN = "https://workpass-cert-manager.pages.dev"

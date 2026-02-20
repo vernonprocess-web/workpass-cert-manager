@@ -1,173 +1,190 @@
-# WorkPass Cert Manager
+# WorkPass & Cert Manager
 
-A full-stack application for managing **Work Permits** and **Trade Certificates** — built on the Cloudflare platform.
+A full-stack application for managing **Work Permits**, **Visit Passes**, and **Trade Certifications** — built on the Cloudflare platform with OCR-powered data extraction and Google Sheets sync.
 
 ## Architecture
 
-| Component       | Technology         | Description                                  |
-| --------------- | ------------------ | -------------------------------------------- |
-| **Frontend**    | Cloudflare Pages   | Static SPA dashboard (HTML/CSS/JS)           |
-| **API Backend** | Cloudflare Workers | RESTful API handling all business logic       |
-| **Database**    | Cloudflare D1      | SQLite-compatible relational data store       |
-| **File Storage**| Cloudflare R2      | S3-compatible object storage for documents    |
+| Component | Technology | Description |
+| --------- | ---------- | ----------- |
+| Frontend | Cloudflare Pages | SPA dashboard for uploading, reviewing, and managing records |
+| Backend | Cloudflare Workers | REST API with OCR processing and Google Sheets sync |
+| Database | Cloudflare D1 | Structured storage for workers, certifications, documents |
+| Storage | Cloudflare R2 | Secure file storage for uploaded documents and photos |
+| OCR | Google Cloud Vision | Automatic text extraction from work permits and certificates |
+| Sheets Sync | Google Sheets API | Automatic sync of worker/certification data to spreadsheets |
 
-## Folder Structure
+## Features
+
+- **OCR Upload Flow**: Upload a work permit or certificate image → automatic text extraction → review/edit extracted fields → save
+- **Duplicate Prevention**: Uses FIN Number as unique identifier — creates new or updates existing worker
+- **Certification Tracking**: Track course titles, providers, issue/expiry dates with visual expiry alerts
+- **Secure File Storage**: All files stored in R2 — accessible only via Worker (not public)
+- **Google Sheets Sync**: Automatically syncs worker and certification data to Google Sheets
+- **Responsive Dashboard**: Premium dark-mode UI with stats, search, pagination, and worker profiles
+
+## Project Structure
 
 ```
 workpass-cert-manager/
-├── frontend/               # Cloudflare Pages — static site
+├── .github/workflows/deploy.yml      ← CI/CD
+├── package.json
+├── wrangler.toml                     ← Cloudflare bindings (D1 + R2)
+├── README.md
+│
+├── frontend/                         ← Cloudflare Pages
 │   ├── index.html
-│   ├── css/
-│   │   └── styles.css
-│   ├── js/
-│   │   ├── app.js
-│   │   ├── api.js
-│   │   └── router.js
-│   └── pages/
-│       ├── dashboard.html
-│       ├── workers.html
-│       ├── certificates.html
-│       └── upload.html
-├── worker/                 # Cloudflare Workers — API
-│   ├── src/
-│   │   ├── index.js        # Entry point & router
-│   │   ├── routes/
-│   │   │   ├── workers.js   # Work permit CRUD
-│   │   │   ├── certificates.js
-│   │   │   └── upload.js    # R2 upload/download
-│   │   ├── middleware/
-│   │   │   ├── cors.js
-│   │   │   └── auth.js
-│   │   └── utils/
-│   │       └── response.js
-│   └── package.json
-├── database/               # Cloudflare D1 — schema & migrations
-│   ├── schema.sql
-│   ├── seed.sql
-│   └── migrations/
-│       └── 0001_initial.sql
-├── wrangler.toml           # Cloudflare project configuration
-├── package.json            # Root package.json (scripts & dev deps)
-├── .gitignore
-├── .github/
-│   └── workflows/
-│       └── deploy.yml      # GitHub Actions CI/CD
-└── README.md
-```
-
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) >= 18
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm install -g wrangler`)
-- A Cloudflare account with Workers, Pages, D1, and R2 enabled
-
-## Quick Start
-
-### 1. Clone & Install
-
-```bash
-git clone https://github.com/YOUR_USERNAME/workpass-cert-manager.git
-cd workpass-cert-manager
-npm install
-cd worker && npm install && cd ..
-```
-
-### 2. Authenticate with Cloudflare
-
-```bash
-wrangler login
-```
-
-### 3. Create D1 Database
-
-```bash
-wrangler d1 create workpass-cert-db
-```
-
-Copy the returned `database_id` into `wrangler.toml` under `[[d1_databases]]`.
-
-### 4. Run Migrations
-
-```bash
-npm run db:migrate
-```
-
-### 5. Create R2 Bucket
-
-```bash
-wrangler r2 bucket create workpass-cert-files
-```
-
-### 6. Local Development
-
-```bash
-# Start the Worker API (with local D1 & R2)
-npm run dev:worker
-
-# Serve the frontend (separate terminal)
-npm run dev:frontend
-```
-
-- **Frontend**: http://localhost:8080
-- **Worker API**: http://localhost:8787
-
-## Deployment
-
-### Deploy Worker (API)
-
-```bash
-npm run deploy:worker
-```
-
-### Deploy Frontend (Pages)
-
-```bash
-npm run deploy:frontend
-```
-
-Or connect the GitHub repository to **Cloudflare Pages** in the dashboard:
-
-1. Go to Cloudflare Dashboard → Pages → Create a project
-2. Connect your GitHub repo
-3. Set build output directory to `frontend/`
-4. Deploy
-
-### CI/CD (GitHub Actions)
-
-Push to `main` to trigger automatic deployments via the included GitHub Actions workflow at `.github/workflows/deploy.yml`.
-
-## Environment Variables
-
-| Variable          | Description                        | Where          |
-| ----------------- | ---------------------------------- | -------------- |
-| `API_BASE_URL`    | Worker API URL                     | Frontend JS    |
-| `AUTH_SECRET`     | Shared secret for API auth         | Worker secret  |
-| `ENVIRONMENT`     | `development` or `production`      | wrangler.toml  |
-
-Set secrets with:
-
-```bash
-wrangler secret put AUTH_SECRET
+│   ├── css/styles.css
+│   └── js/
+│       ├── api.js                    ← API client
+│       ├── router.js                 ← Hash-based SPA router
+│       └── app.js                    ← Application logic
+│
+├── worker/                           ← Cloudflare Workers
+│   └── src/
+│       ├── index.js                  ← Entry point + stats
+│       ├── google-sync.js            ← Google Sheets sync module
+│       ├── routes/
+│       │   ├── workers.js            ← Worker CRUD + document upload
+│       │   ├── certifications.js     ← Certification CRUD
+│       │   ├── documents.js          ← R2 file upload/retrieval
+│       │   └── ocr.js                ← Google Vision OCR processing
+│       ├── middleware/
+│       │   ├── cors.js
+│       │   └── auth.js
+│       └── utils/
+│           └── response.js
+│
+└── database/
+    ├── schema.sql                    ← Reference schema
+    ├── seed.sql                      ← Sample data
+    └── migrations/
+        ├── 0001_initial.sql
+        └── 0002_system_upgrade.sql   ← Current schema
 ```
 
 ## API Endpoints
 
-| Method | Endpoint                      | Description                   |
-| ------ | ----------------------------- | ----------------------------- |
-| GET    | `/api/workers`                | List all work permits         |
-| GET    | `/api/workers/:id`            | Get a single work permit      |
-| POST   | `/api/workers`                | Create a work permit          |
-| PUT    | `/api/workers/:id`            | Update a work permit          |
-| DELETE | `/api/workers/:id`            | Delete a work permit          |
-| GET    | `/api/certificates`           | List all certificates         |
-| GET    | `/api/certificates/:id`       | Get a single certificate      |
-| POST   | `/api/certificates`           | Create a certificate          |
-| PUT    | `/api/certificates/:id`       | Update a certificate          |
-| DELETE | `/api/certificates/:id`       | Delete a certificate          |
-| POST   | `/api/upload`                 | Upload a file to R2           |
-| GET    | `/api/files/:key`             | Download / get file from R2   |
-| DELETE | `/api/files/:key`             | Delete a file from R2         |
-| GET    | `/api/stats`                  | Dashboard statistics          |
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| GET | `/api/stats` | Dashboard statistics |
+| GET | `/api/health` | Health check |
+| POST | `/api/workers/create` | Create or update worker (upsert by FIN) |
+| POST | `/api/workers/upload-document` | Upload document linked to worker |
+| GET | `/api/workers/list` | List workers with search/pagination |
+| GET | `/api/workers/:id` | Get worker with certifications & documents |
+| DELETE | `/api/workers/:id` | Delete worker + associated data |
+| POST | `/api/certifications/create` | Create certification |
+| GET | `/api/certifications/list` | List certifications |
+| DELETE | `/api/certifications/:id` | Delete certification |
+| POST | `/api/ocr/process` | OCR process uploaded image |
+| POST | `/api/documents/upload` | Upload document to R2 |
+| GET | `/api/files/:key` | Retrieve file from R2 (private) |
+| DELETE | `/api/files/:key` | Delete file from R2 |
+
+## Database Tables
+
+### workers
+| Column | Type | Notes |
+| ------ | ---- | ----- |
+| id | INTEGER PK | Auto-increment |
+| fin_number | TEXT UNIQUE | Foreign Identification Number |
+| worker_name | TEXT NOT NULL | |
+| date_of_birth | TEXT | YYYY-MM-DD |
+| nationality | TEXT | |
+| sex | TEXT | M or F |
+| employer_name | TEXT | |
+| photo_key | TEXT | R2 key |
+| created_at | TEXT | Auto |
+| updated_at | TEXT | Auto |
+
+### certifications
+| Column | Type | Notes |
+| ------ | ---- | ----- |
+| id | INTEGER PK | Auto-increment |
+| worker_id | INTEGER FK | References workers(id) |
+| course_title | TEXT NOT NULL | |
+| course_provider | TEXT | |
+| issue_date | TEXT | |
+| expiry_date | TEXT | |
+| file_key | TEXT | R2 key |
+| created_at | TEXT | Auto |
+| updated_at | TEXT | Auto |
+
+### documents
+| Column | Type | Notes |
+| ------ | ---- | ----- |
+| id | INTEGER PK | Auto-increment |
+| worker_id | INTEGER FK | References workers(id) |
+| document_type | TEXT NOT NULL | work_permit / visit_pass / certification / photo / other |
+| r2_key | TEXT NOT NULL | R2 object key |
+| original_name | TEXT | |
+| mime_type | TEXT | |
+| file_size | INTEGER | |
+| created_at | TEXT | Auto |
+
+## Setup & Deployment
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) installed and authenticated
+- Google Cloud Vision API key (for OCR)
+- Google Sheets API key + Sheet ID (for sync)
+
+### 1. Set Wrangler Secrets
+
+```bash
+wrangler secret put GOOGLE_VISION_API_KEY
+wrangler secret put GOOGLE_SHEETS_API_KEY
+wrangler secret put GOOGLE_SHEET_ID
+```
+
+### 2. Run Database Migrations
+
+```bash
+# Remote (production)
+wrangler d1 migrations apply workpass-cert-db --remote
+
+# Local (development)
+wrangler d1 migrations apply workpass-cert-db --local
+```
+
+### 3. Seed Database (optional)
+
+```bash
+wrangler d1 execute workpass-cert-db --file=./database/seed.sql --local
+```
+
+### 4. Local Development
+
+```bash
+npm run dev:worker     # Start Worker API on :8787
+npm run dev:frontend   # Start frontend on :8080
+```
+
+### 5. Deploy
+
+```bash
+npm run deploy:worker    # Deploy Worker to Cloudflare
+npm run deploy:frontend  # Deploy frontend to Cloudflare Pages
+```
+
+## Cloudflare Bindings
+
+| Binding | Type | Resource |
+| ------- | ---- | -------- |
+| DB | D1 | workpass-cert-db |
+| BUCKET | R2 | workpass-cert-files |
+| GOOGLE_VISION_API_KEY | Secret | Google Cloud Vision API key |
+| GOOGLE_SHEETS_API_KEY | Secret | Google Sheets API key |
+| GOOGLE_SHEET_ID | Secret | Target spreadsheet ID |
+
+## Security
+
+- R2 files are **NOT** publicly accessible — all access goes through the Worker
+- File type validation on upload (images, PDF, Word only)
+- Google API keys stored as Wrangler secrets (not in source code)
+- CORS restricted to the Pages domain in production
 
 ## License
 

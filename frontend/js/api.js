@@ -4,8 +4,6 @@
  */
 
 const API = (() => {
-    // In production, set this to your Worker URL
-    // In development, the Worker runs on localhost:8787
     const BASE_URL = window.location.hostname === 'localhost'
         ? 'http://localhost:8787'
         : 'https://workpass-cert-manager-api.vernonprocess.workers.dev';
@@ -20,7 +18,7 @@ const API = (() => {
             ...options,
         };
 
-        // Don't set Content-Type for FormData (browser sets boundary automatically)
+        // Don't set Content-Type for FormData
         if (options.body instanceof FormData) {
             delete config.headers['Content-Type'];
         }
@@ -48,10 +46,15 @@ const API = (() => {
     }
 
     return {
-        // ─── Workers (Work Permits) ────────────────────────
-        getWorkers(params = {}) {
+        // ─── Stats ────────────────────────────────────────
+        getStats() {
+            return request('/api/stats');
+        },
+
+        // ─── Workers ─────────────────────────────────────
+        listWorkers(params = {}) {
             const query = new URLSearchParams(params).toString();
-            return request(`/api/workers${query ? '?' + query : ''}`);
+            return request(`/api/workers/list${query ? '?' + query : ''}`);
         },
 
         getWorker(id) {
@@ -59,15 +62,8 @@ const API = (() => {
         },
 
         createWorker(data) {
-            return request('/api/workers', {
+            return request('/api/workers/create', {
                 method: 'POST',
-                body: JSON.stringify(data),
-            });
-        },
-
-        updateWorker(id, data) {
-            return request(`/api/workers/${id}`, {
-                method: 'PUT',
                 body: JSON.stringify(data),
             });
         },
@@ -78,62 +74,67 @@ const API = (() => {
             });
         },
 
-        // ─── Certificates ─────────────────────────────────
-        getCertificates(params = {}) {
-            const query = new URLSearchParams(params).toString();
-            return request(`/api/certificates${query ? '?' + query : ''}`);
-        },
-
-        getCertificate(id) {
-            return request(`/api/certificates/${id}`);
-        },
-
-        createCertificate(data) {
-            return request('/api/certificates', {
-                method: 'POST',
-                body: JSON.stringify(data),
-            });
-        },
-
-        updateCertificate(id, data) {
-            return request(`/api/certificates/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify(data),
-            });
-        },
-
-        deleteCertificate(id) {
-            return request(`/api/certificates/${id}`, {
-                method: 'DELETE',
-            });
-        },
-
-        // ─── Upload / Files ───────────────────────────────
-        uploadFile(file, entityType, entityId) {
+        uploadWorkerDocument(file, finNumber, documentType) {
             const formData = new FormData();
             formData.append('file', file);
-            if (entityType) formData.append('entity_type', entityType);
-            if (entityId) formData.append('entity_id', entityId);
-
-            return request('/api/upload', {
+            if (finNumber) formData.append('fin_number', finNumber);
+            if (documentType) formData.append('document_type', documentType);
+            return request('/api/workers/upload-document', {
                 method: 'POST',
                 body: formData,
             });
         },
 
-        getFileUrl(key) {
-            return `${BASE_URL}/api/files/${encodeURIComponent(key)}`;
+        // ─── Certifications ──────────────────────────────
+        listCertifications(params = {}) {
+            const query = new URLSearchParams(params).toString();
+            return request(`/api/certifications/list${query ? '?' + query : ''}`);
         },
 
-        deleteFile(key) {
-            return request(`/api/files/${encodeURIComponent(key)}`, {
+        createCertification(data) {
+            return request('/api/certifications/create', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteCertification(id) {
+            return request(`/api/certifications/${id}`, {
                 method: 'DELETE',
             });
         },
 
-        // ─── Stats ────────────────────────────────────────
-        getStats() {
-            return request('/api/stats');
+        // ─── OCR ─────────────────────────────────────────
+        processOCR(file, documentType) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('document_type', documentType || 'auto');
+            return request('/api/ocr/process', {
+                method: 'POST',
+                body: formData,
+            });
+        },
+
+        // ─── Documents / Files ───────────────────────────
+        uploadDocument(file, workerId, documentType) {
+            const formData = new FormData();
+            formData.append('file', file);
+            if (workerId) formData.append('worker_id', workerId);
+            if (documentType) formData.append('document_type', documentType);
+            return request('/api/documents/upload', {
+                method: 'POST',
+                body: formData,
+            });
+        },
+
+        getFileUrl(r2Key) {
+            return `${BASE_URL}/api/files/${encodeURIComponent(r2Key)}`;
+        },
+
+        deleteFile(r2Key) {
+            return request(`/api/files/${encodeURIComponent(r2Key)}`, {
+                method: 'DELETE',
+            });
         },
     };
 })();

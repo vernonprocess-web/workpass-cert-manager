@@ -4,51 +4,49 @@
  */
 
 const Router = (() => {
-    const pages = ['dashboard', 'workers', 'certificates', 'upload'];
+    const pages = ['dashboard', 'workers', 'worker-profile', 'upload', 'certifications'];
 
     function init() {
-        // Listen for hash changes
-        window.addEventListener('hashchange', handleRoute);
-
-        // Handle nav link clicks
-        document.querySelectorAll('.nav-link[data-page]').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const page = link.dataset.page;
-                window.location.hash = `#${page}`;
-            });
-        });
-
+        window.addEventListener('hashchange', onRouteChange);
         // Initial route
-        handleRoute();
+        onRouteChange();
     }
 
-    function handleRoute() {
-        const hash = window.location.hash.slice(1) || 'dashboard';
-        const page = pages.includes(hash) ? hash : 'dashboard';
+    function onRouteChange() {
+        const hash = window.location.hash.replace('#', '') || 'dashboard';
+        const [page, ...params] = hash.split('/');
+        activatePage(page, params);
+    }
 
-        // Update active nav link
+    function activatePage(page, params = []) {
+        // Normalize
+        const targetPage = pages.includes(page) ? page : 'dashboard';
+
+        // Hide all pages
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+
+        // Show target page
+        const el = document.getElementById(`page-${targetPage}`);
+        if (el) el.classList.add('active');
+
+        // Update nav
         document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.toggle('active', link.dataset.page === page);
-        });
-
-        // Show active page
-        document.querySelectorAll('.page').forEach(section => {
-            section.classList.toggle('active', section.id === `page-${page}`);
+            link.classList.toggle('active', link.dataset.page === targetPage);
         });
 
         // Close mobile sidebar
-        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebar')?.classList.remove('open');
 
-        // Trigger page load callback
+        // Trigger page-specific load
         if (typeof App !== 'undefined' && App.onPageChange) {
-            App.onPageChange(page);
+            App.onPageChange(targetPage, params);
         }
     }
 
-    function navigate(page) {
-        window.location.hash = `#${page}`;
+    function navigate(page, ...params) {
+        const hash = params.length > 0 ? `${page}/${params.join('/')}` : page;
+        window.location.hash = hash;
     }
 
-    return { init, navigate };
+    return { init, navigate, activatePage };
 })();

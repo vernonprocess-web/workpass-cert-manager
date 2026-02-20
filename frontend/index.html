@@ -1,201 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="WorkPass Cert Manager — Manage work permits and trade certificates efficiently.">
-  <title>WorkPass Cert Manager</title>
+  <meta name="description"
+    content="WorkPass &amp; Cert Manager — Upload, OCR, and manage work permits and certificates.">
+  <title>WorkPass &amp; Cert Manager</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
+
 <body>
-  <!-- ─── Sidebar Navigation ──────────────────────────────── -->
+  <!-- ─── Sidebar ───────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo">
         <div class="logo-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
         </div>
         <div>
           <h1 class="logo-title">WorkPass</h1>
-          <span class="logo-subtitle">Cert Manager</span>
+          <span class="logo-subtitle">&amp; Cert Manager</span>
         </div>
       </div>
     </div>
 
     <nav class="sidebar-nav">
       <a href="#dashboard" class="nav-link active" data-page="dashboard" id="nav-dashboard">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
         <span>Dashboard</span>
       </a>
       <a href="#workers" class="nav-link" data-page="workers" id="nav-workers">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Work Permits</span>
-      </a>
-      <a href="#certificates" class="nav-link" data-page="certificates" id="nav-certificates">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>Certificates</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+        </svg>
+        <span>Workers</span>
       </a>
       <a href="#upload" class="nav-link" data-page="upload" id="nav-upload">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <span>Upload</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        <span>Upload &amp; OCR</span>
+      </a>
+      <a href="#certifications" class="nav-link" data-page="certifications" id="nav-certifications">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+        <span>Certifications</span>
       </a>
     </nav>
 
     <div class="sidebar-footer">
       <div class="sidebar-footer-text">
-        <span class="version">v1.0.0</span>
-        <span class="env-badge" id="env-badge">DEV</span>
+        <span class="version">v2.0.0</span>
+        <span class="env-badge" id="env-badge">LIVE</span>
       </div>
     </div>
   </aside>
 
-  <!-- ─── Mobile Header ───────────────────────────────────── -->
+  <!-- ─── Mobile Header ─────────────────────────────────── -->
   <header class="mobile-header" id="mobile-header">
     <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </svg>
     </button>
-    <span class="mobile-title">WorkPass Cert Manager</span>
+    <span class="mobile-title">WorkPass &amp; Cert Manager</span>
   </header>
 
-  <!-- ─── Main Content ────────────────────────────────────── -->
+  <!-- ─── Main Content ──────────────────────────────────── -->
   <main class="main-content" id="main-content">
-    <!-- Dashboard Page -->
+
+    <!-- ═══ Dashboard Page ════════════════════════════════ -->
     <section class="page active" id="page-dashboard">
       <div class="page-header">
         <h2 class="page-title">Dashboard</h2>
-        <p class="page-description">Overview of work permits and certificates</p>
+        <p class="page-description">Overview of workers, certifications, and documents</p>
       </div>
 
       <div class="stats-grid" id="stats-grid">
         <div class="stat-card stat-card--primary">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          </div>
+          <div class="stat-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+            </svg></div>
           <div class="stat-info">
             <span class="stat-value" id="stat-total-workers">—</span>
             <span class="stat-label">Total Workers</span>
           </div>
         </div>
-        <div class="stat-card stat-card--success">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          </div>
+        <div class="stat-card stat-card--info">
+          <div class="stat-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg></div>
           <div class="stat-info">
-            <span class="stat-value" id="stat-active-workers">—</span>
-            <span class="stat-label">Active Permits</span>
+            <span class="stat-value" id="stat-total-certs">—</span>
+            <span class="stat-label">Certifications</span>
           </div>
         </div>
         <div class="stat-card stat-card--warning">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
+          <div class="stat-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg></div>
           <div class="stat-info">
             <span class="stat-value" id="stat-expiring-soon">—</span>
             <span class="stat-label">Expiring Soon</span>
           </div>
         </div>
         <div class="stat-card stat-card--danger">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-          </div>
+          <div class="stat-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg></div>
           <div class="stat-info">
-            <span class="stat-value" id="stat-expired-workers">—</span>
-            <span class="stat-label">Expired Permits</span>
-          </div>
-        </div>
-        <div class="stat-card stat-card--info">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </div>
-          <div class="stat-info">
-            <span class="stat-value" id="stat-total-certs">—</span>
-            <span class="stat-label">Total Certificates</span>
+            <span class="stat-value" id="stat-expired-certs">—</span>
+            <span class="stat-label">Expired Certs</span>
           </div>
         </div>
         <div class="stat-card stat-card--purple">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          </div>
+          <div class="stat-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg></div>
           <div class="stat-info">
-            <span class="stat-value" id="stat-valid-certs">—</span>
-            <span class="stat-label">Valid Certificates</span>
+            <span class="stat-value" id="stat-total-docs">—</span>
+            <span class="stat-label">Documents</span>
           </div>
         </div>
       </div>
 
-      <!-- Recent Workers Table -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Recent Work Permits</h3>
+          <h3 class="card-title">Recent Workers</h3>
+          <button class="btn btn-sm btn-secondary" onclick="Router.navigate('workers')">View All →</button>
         </div>
         <div class="table-wrapper">
           <table class="data-table" id="dashboard-workers-table">
             <thead>
               <tr>
-                <th>FIN</th>
-                <th>Name</th>
+                <th>FIN Number</th>
+                <th>Worker Name</th>
                 <th>Employer</th>
-                <th>Sector</th>
-                <th>Status</th>
-                <th>Expiry</th>
+                <th>Nationality</th>
+                <th>Created</th>
               </tr>
             </thead>
             <tbody id="dashboard-workers-tbody">
-              <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+              <tr>
+                <td colspan="5" class="empty-state">Loading...</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
     </section>
 
-    <!-- Workers Page -->
+    <!-- ═══ Workers List Page ═════════════════════════════ -->
     <section class="page" id="page-workers">
       <div class="page-header">
-        <h2 class="page-title">Work Permits</h2>
+        <h2 class="page-title">Workers</h2>
         <div class="page-actions">
           <div class="search-box">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
             <input type="text" id="workers-search" placeholder="Search by name, FIN, employer...">
           </div>
-          <select id="workers-status-filter" class="select-filter">
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="expired">Expired</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
           <button class="btn btn-primary" id="btn-add-worker">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
             Add Worker
           </button>
         </div>
       </div>
-
       <div class="card">
         <div class="table-wrapper">
           <table class="data-table" id="workers-table">
             <thead>
               <tr>
-                <th>FIN</th>
-                <th>Name</th>
-                <th>Work Permit No</th>
-                <th>Employer</th>
-                <th>Sector</th>
+                <th>FIN Number</th>
+                <th>Worker Name</th>
+                <th>DOB</th>
                 <th>Nationality</th>
-                <th>Status</th>
-                <th>Expiry Date</th>
+                <th>Sex</th>
+                <th>Employer</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="workers-tbody">
-              <tr><td colspan="9" class="empty-state">Loading...</td></tr>
+              <tr>
+                <td colspan="7" class="empty-state">Loading...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -203,47 +233,203 @@
       </div>
     </section>
 
-    <!-- Certificates Page -->
-    <section class="page" id="page-certificates">
+    <!-- ═══ Worker Profile Page ═══════════════════════════ -->
+    <section class="page" id="page-worker-profile">
       <div class="page-header">
-        <h2 class="page-title">Certificates</h2>
+        <button class="btn btn-secondary btn-sm" onclick="Router.navigate('workers')">← Back to Workers</button>
+        <h2 class="page-title" id="profile-title">Worker Profile</h2>
+      </div>
+      <div class="profile-grid">
+        <div class="card profile-card">
+          <div class="card-header">
+            <h3 class="card-title">Worker Details</h3>
+          </div>
+          <div class="profile-details" id="profile-details">Loading...</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Certifications</h3>
+            <button class="btn btn-sm btn-primary" id="btn-add-cert-profile">+ Add</button>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Provider</th>
+                  <th>Issue</th>
+                  <th>Expiry</th>
+                </tr>
+              </thead>
+              <tbody id="profile-certs-tbody">
+                <tr>
+                  <td colspan="4" class="empty-state">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Documents</h3>
+          </div>
+          <div class="documents-grid" id="profile-documents">
+            <p class="empty-state">No documents</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Upload & OCR Page ═════════════════════════════ -->
+    <section class="page" id="page-upload">
+      <div class="page-header">
+        <h2 class="page-title">Upload &amp; OCR</h2>
+        <p class="page-description">Upload work permit cards, visit passes, or certification documents for automatic
+          data extraction</p>
+      </div>
+
+      <div class="upload-ocr-container">
+        <!-- Step 1: Upload -->
+        <div class="card upload-step" id="upload-step-1">
+          <div class="card-header">
+            <h3 class="card-title">Step 1 — Upload Document</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group" style="margin-bottom:16px">
+              <label for="ocr-doc-type">Document Type</label>
+              <select id="ocr-doc-type" class="form-control">
+                <option value="work_permit">Work Permit Card</option>
+                <option value="visit_pass">Visit Pass</option>
+                <option value="certification">Certification</option>
+              </select>
+            </div>
+            <div class="upload-zone" id="ocr-upload-zone">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                class="upload-icon">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <h3>Drag &amp; drop image here</h3>
+              <p>Supports JPEG, PNG, WebP • Max 10MB</p>
+              <input type="file" id="ocr-file-input" accept="image/*" hidden>
+            </div>
+            <div id="ocr-preview-container" class="ocr-preview" hidden>
+              <img id="ocr-preview-img" alt="Preview">
+              <button class="btn btn-secondary btn-sm" id="ocr-remove-file">✕ Remove</button>
+            </div>
+            <button class="btn btn-primary btn-block" id="btn-run-ocr" disabled style="margin-top:16px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              Run OCR &amp; Extract Data
+            </button>
+            <div class="upload-progress" id="ocr-progress" hidden>
+              <div class="progress-bar">
+                <div class="progress-fill" id="ocr-progress-fill" style="width:0%"></div>
+              </div>
+              <span class="progress-text" id="ocr-progress-text">Processing...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Review & Edit OCR Results -->
+        <div class="card upload-step" id="upload-step-2" hidden>
+          <div class="card-header">
+            <h3 class="card-title">Step 2 — Review &amp; Edit Extracted Data</h3>
+          </div>
+          <div class="card-body">
+            <div class="ocr-raw-text-toggle">
+              <button class="btn btn-sm btn-secondary" id="btn-toggle-raw">Show Raw OCR Text</button>
+              <pre class="ocr-raw-text" id="ocr-raw-text" hidden></pre>
+            </div>
+            <div class="ocr-fields" id="ocr-fields">
+              <h4 class="ocr-section-title">Worker Information</h4>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-fin">FIN Number *</label><input type="text" id="ocr-fin"
+                    class="form-control"></div>
+                <div class="form-group"><label for="ocr-name">Worker Name *</label><input type="text" id="ocr-name"
+                    class="form-control"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-dob">Date of Birth</label><input type="date" id="ocr-dob"
+                    class="form-control"></div>
+                <div class="form-group"><label for="ocr-nationality">Nationality</label><input type="text"
+                    id="ocr-nationality" class="form-control"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-sex">Sex</label><select id="ocr-sex" class="form-control">
+                    <option value="">—</option>
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
+                  </select></div>
+                <div class="form-group"><label for="ocr-employer">Employer</label><input type="text" id="ocr-employer"
+                    class="form-control"></div>
+              </div>
+
+              <h4 class="ocr-section-title">Certification (if applicable)</h4>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-course">Course Title</label><input type="text" id="ocr-course"
+                    class="form-control"></div>
+                <div class="form-group"><label for="ocr-provider">Course Provider</label><input type="text"
+                    id="ocr-provider" class="form-control"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-issue-date">Issue Date</label><input type="date"
+                    id="ocr-issue-date" class="form-control"></div>
+                <div class="form-group"><label for="ocr-expiry-date">Expiry Date</label><input type="date"
+                    id="ocr-expiry-date" class="form-control"></div>
+              </div>
+            </div>
+            <div class="ocr-actions">
+              <button class="btn btn-secondary" id="btn-ocr-back">← Back</button>
+              <button class="btn btn-primary" id="btn-ocr-save">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                Save Worker &amp; Certification
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Certifications List Page ══════════════════════ -->
+    <section class="page" id="page-certifications">
+      <div class="page-header">
+        <h2 class="page-title">Certifications</h2>
         <div class="page-actions">
-          <select id="certs-type-filter" class="select-filter">
-            <option value="">All Types</option>
-            <option value="coretrade">CoreTrade</option>
-            <option value="myw">Multi-Year WP</option>
-            <option value="safety">Safety</option>
-          </select>
-          <select id="certs-status-filter" class="select-filter">
-            <option value="">All Statuses</option>
-            <option value="valid">Valid</option>
-            <option value="expired">Expired</option>
-            <option value="revoked">Revoked</option>
-          </select>
           <button class="btn btn-primary" id="btn-add-cert">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add Certificate
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add Certification
           </button>
         </div>
       </div>
-
       <div class="card">
         <div class="table-wrapper">
           <table class="data-table" id="certs-table">
             <thead>
               <tr>
-                <th>Cert Name</th>
-                <th>Type</th>
-                <th>Cert No</th>
                 <th>Worker</th>
-                <th>Issuing Body</th>
-                <th>Status</th>
+                <th>FIN</th>
+                <th>Course Title</th>
+                <th>Provider</th>
+                <th>Issue Date</th>
                 <th>Expiry Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="certs-tbody">
-              <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+              <tr>
+                <td colspan="7" class="empty-state">Loading...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -251,73 +437,26 @@
       </div>
     </section>
 
-    <!-- Upload Page -->
-    <section class="page" id="page-upload">
-      <div class="page-header">
-        <h2 class="page-title">Upload Documents</h2>
-        <p class="page-description">Upload work permit cards, certificates, and other documents</p>
-      </div>
-
-      <div class="upload-area" id="upload-area">
-        <div class="upload-zone" id="upload-zone">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="upload-icon">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-          <h3>Drag & drop files here</h3>
-          <p>or click to browse</p>
-          <input type="file" id="file-input" multiple accept="image/*,.pdf,.doc,.docx" hidden>
-        </div>
-
-        <div class="upload-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="upload-entity-type">Link to</label>
-              <select id="upload-entity-type" class="form-control">
-                <option value="">No link</option>
-                <option value="worker">Worker</option>
-                <option value="certificate">Certificate</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="upload-entity-id">ID</label>
-              <input type="number" id="upload-entity-id" class="form-control" placeholder="Entity ID">
-            </div>
-          </div>
-          <button class="btn btn-primary btn-block" id="btn-upload" disabled>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload Files
-          </button>
-        </div>
-
-        <div class="upload-progress" id="upload-progress" hidden>
-          <div class="progress-bar">
-            <div class="progress-fill" id="progress-fill"></div>
-          </div>
-          <span class="progress-text" id="progress-text">Uploading...</span>
-        </div>
-
-        <div class="upload-results" id="upload-results"></div>
-      </div>
-    </section>
   </main>
 
-  <!-- ─── Modal ───────────────────────────────────────────── -->
+  <!-- ─── Modal ─────────────────────────────────────────── -->
   <div class="modal-overlay" id="modal-overlay" hidden>
     <div class="modal" id="modal">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-title">Modal</h3>
-        <button class="modal-close" id="modal-close" aria-label="Close modal">&times;</button>
+        <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body" id="modal-body"></div>
       <div class="modal-footer" id="modal-footer"></div>
     </div>
   </div>
 
-  <!-- ─── Toast Notifications ─────────────────────────────── -->
+  <!-- ─── Toast Container ───────────────────────────────── -->
   <div class="toast-container" id="toast-container"></div>
 
   <script src="js/api.js"></script>
   <script src="js/router.js"></script>
   <script src="js/app.js"></script>
 </body>
+
 </html>

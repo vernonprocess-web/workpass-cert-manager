@@ -1,16 +1,16 @@
 {
   "name": "workpass-cert-manager",
-  "version": "1.0.0",
-  "description": "Work Permit & Certificate Manager — Cloudflare Workers + Pages + D1 + R2",
+  "version": "2.0.0",
+  "description": "WorkPass & Cert Manager — Cloudflare Workers + Pages + D1 + R2 with OCR & Google Sheets sync",
   "private": true,
   "scripts": {
     "dev:worker": "cd worker && wrangler dev --local --persist-to=../.wrangler/state",
     "dev:frontend": "npx -y serve frontend -l 8080",
     "deploy:worker": "cd worker && wrangler deploy",
     "deploy:frontend": "wrangler pages deploy frontend --project-name=workpass-cert-manager",
-    "db:migrate": "wrangler d1 execute workpass-cert-db --file=./database/migrations/0001_initial.sql",
-    "db:migrate:local": "wrangler d1 execute workpass-cert-db --file=./database/migrations/0001_initial.sql --local",
-    "db:seed": "wrangler d1 execute workpass-cert-db --file=./database/seed.sql",
+    "db:migrate": "wrangler d1 execute workpass-cert-db --file=./database/migrations/0002_system_upgrade.sql --remote",
+    "db:migrate:local": "wrangler d1 execute workpass-cert-db --file=./database/migrations/0002_system_upgrade.sql --local",
+    "db:seed": "wrangler d1 execute workpass-cert-db --file=./database/seed.sql --remote",
     "db:seed:local": "wrangler d1 execute workpass-cert-db --file=./database/seed.sql --local"
   },
   "keywords": [
@@ -19,7 +19,8 @@
     "d1",
     "r2",
     "work-permit",
-    "certificate-manager"
+    "certificate-manager",
+    "ocr"
   ],
   "author": "",
   "license": "MIT"

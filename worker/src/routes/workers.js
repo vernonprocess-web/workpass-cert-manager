@@ -1,34 +1,198 @@
 /**
- * Workers (Work Permits) Route Handler
- * CRUD operations for work permit records.
+ * Workers Route Handler
+ * CRUD operations with FIN-based upsert (duplicate prevention).
+ *
+ * POST /api/workers/create          — Create or update worker by FIN
+ * POST /api/workers/upload-document — Upload a document for a worker
+ * GET  /api/workers/list            — List workers with search/pagination
+ * GET  /api/workers/:id             — Get single worker with certs & docs
  */
 
-import { jsonResponse, errorResponse, createdResponse, noContentResponse } from '../utils/response.js';
+import { jsonResponse, errorResponse, createdResponse } from '../utils/response.js';
+import { syncWorkerToSheet } from '../google-sync.js';
 
 export async function handleWorkers(request, env, path) {
     const method = request.method;
 
-    // Parse ID from path: /api/workers/:id
-    const segments = path.split('/').filter(Boolean); // ['api', 'workers', ':id?']
-    const id = segments.length >= 3 ? segments[2] : null;
-
-    switch (method) {
-        case 'GET':
-            return id ? getWorker(env, id) : listWorkers(request, env);
-        case 'POST':
-            return createWorker(request, env);
-        case 'PUT':
-            return id ? updateWorker(request, env, id) : errorResponse('Worker ID required', 400);
-        case 'DELETE':
-            return id ? deleteWorker(env, id) : errorResponse('Worker ID required', 400);
-        default:
-            return errorResponse('Method Not Allowed', 405);
+    // POST /api/workers/create
+    if (path === '/api/workers/create' && method === 'POST') {
+        return upsertWorker(request, env);
     }
+
+    // POST /api/workers/upload-document
+    if (path === '/api/workers/upload-document' && method === 'POST') {
+        return uploadWorkerDocument(request, env);
+    }
+
+    // GET /api/workers/list
+    if (path === '/api/workers/list' && method === 'GET') {
+        return listWorkers(request, env);
+    }
+
+    // GET /api/workers/:id
+    const idMatch = path.match(/^\/api\/workers\/(\d+)$/);
+    if (idMatch && method === 'GET') {
+        return getWorker(env, parseInt(idMatch[1], 10));
+    }
+
+    // DELETE /api/workers/:id
+    if (idMatch && method === 'DELETE') {
+        return deleteWorker(env, parseInt(idMatch[1], 10));
+    }
+
+    return errorResponse('Not Found', 404);
 }
 
+/**
+ * Create or update worker by FIN number (upsert).
+ * If FIN exists → update existing record.
+ * If FIN does not exist → create new record.
+ */
+async function upsertWorker(request, env) {
+    const body = await request.json();
+    const { fin_number, worker_name, date_of_birth, nationality, sex, employer_name } = body;
+
+    if (!fin_number || !worker_name) {
+        return errorResponse('fin_number and worker_name are required', 400);
+    }
+
+    const cleanFin = fin_number.toUpperCase().trim();
+    const cleanName = worker_name.toUpperCase().trim();
+
+    // Check if worker with this FIN already exists
+    const existing = await env.DB.prepare(
+        'SELECT id FROM workers WHERE fin_number = ?'
+    ).bind(cleanFin).first();
+
+    let workerId;
+    let isNew = false;
+
+    if (existing) {
+        // Update existing worker
+        await env.DB.prepare(`
+            UPDATE workers SET
+                worker_name = ?,
+                date_of_birth = COALESCE(?, date_of_birth),
+                nationality = COALESCE(?, nationality),
+                sex = COALESCE(?, sex),
+                employer_name = COALESCE(?, employer_name),
+                updated_at = datetime('now')
+            WHERE fin_number = ?
+        `).bind(
+            cleanName,
+            date_of_birth || null,
+            nationality ? nationality.toUpperCase().trim() : null,
+            sex ? sex.toUpperCase().trim() : null,
+            employer_name ? employer_name.toUpperCase().trim() : null,
+            cleanFin
+        ).run();
+
+        workerId = existing.id;
+    } else {
+        // Create new worker
+        const result = await env.DB.prepare(`
+            INSERT INTO workers (fin_number, worker_name, date_of_birth, nationality, sex, employer_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(
+            cleanFin,
+            cleanName,
+            date_of_birth || null,
+            nationality ? nationality.toUpperCase().trim() : null,
+            sex ? sex.toUpperCase().trim() : null,
+            employer_name ? employer_name.toUpperCase().trim() : null
+        ).run();
+
+        workerId = result.meta.last_row_id;
+        isNew = true;
+    }
+
+    // Fetch the full worker record
+    const worker = await env.DB.prepare(
+        'SELECT * FROM workers WHERE id = ?'
+    ).bind(workerId).first();
+
+    // Sync to Google Sheets (fire-and-forget)
+    try {
+        await syncWorkerToSheet(env, worker);
+    } catch (err) {
+        console.error('Google Sheets sync failed:', err.message);
+    }
+
+    return isNew ? createdResponse(worker) : jsonResponse(worker);
+}
+
+/**
+ * Upload a document for a worker.
+ * Accepts multipart/form-data with: file, fin_number, document_type
+ */
+async function uploadWorkerDocument(request, env) {
+    const contentType = request.headers.get('Content-Type') || '';
+    if (!contentType.includes('multipart/form-data')) {
+        return errorResponse('Content-Type must be multipart/form-data', 400);
+    }
+
+    const formData = await request.formData();
+    const file = formData.get('file');
+    const finNumber = formData.get('fin_number');
+    const documentType = formData.get('document_type') || 'other';
+
+    if (!file || !(file instanceof File)) {
+        return errorResponse('No file provided', 400);
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) {
+        return errorResponse('File type not allowed. Use JPEG, PNG, WebP, GIF, PDF, or Word documents.', 400);
+    }
+
+    // Find or determine worker
+    let workerId = null;
+    if (finNumber) {
+        const worker = await env.DB.prepare(
+            'SELECT id FROM workers WHERE fin_number = ?'
+        ).bind(finNumber.toUpperCase().trim()).first();
+        if (worker) workerId = worker.id;
+    }
+
+    // Generate R2 key
+    const timestamp = Date.now();
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const r2Key = `${documentType}/${timestamp}_${sanitizedName}`;
+
+    // Upload to R2
+    const arrayBuffer = await file.arrayBuffer();
+    await env.BUCKET.put(r2Key, arrayBuffer, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: {
+            originalName: file.name,
+            documentType,
+            finNumber: finNumber || '',
+        },
+    });
+
+    // Record in database
+    await env.DB.prepare(`
+        INSERT INTO documents (worker_id, document_type, r2_key, original_name, mime_type, file_size)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(workerId, documentType, r2Key, file.name, file.type, arrayBuffer.byteLength).run();
+
+    return createdResponse({
+        r2_key: r2Key,
+        worker_id: workerId,
+        document_type: documentType,
+        original_name: file.name,
+        file_size: arrayBuffer.byteLength,
+        file_url: `/api/files/${encodeURIComponent(r2Key)}`,
+    });
+}
+
+/**
+ * List workers with search & pagination.
+ */
 async function listWorkers(request, env) {
     const url = new URL(request.url);
-    const status = url.searchParams.get('status');
     const search = url.searchParams.get('search');
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const limit = parseInt(url.searchParams.get('limit') || '20', 10);
@@ -37,138 +201,76 @@ async function listWorkers(request, env) {
     let query = 'SELECT * FROM workers WHERE 1=1';
     const params = [];
 
-    if (status) {
-        query += ' AND permit_status = ?';
-        params.push(status);
-    }
-
     if (search) {
-        query += ' AND (name LIKE ? OR fin LIKE ? OR work_permit_no LIKE ? OR employer LIKE ?)';
-        const searchTerm = `%${search}%`;
-        params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+        query += ' AND (worker_name LIKE ? OR fin_number LIKE ? OR employer_name LIKE ?)';
+        const term = `%${search}%`;
+        params.push(term, term, term);
     }
 
-    // Count total
+    // Count
     const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
-    const totalResult = await env.DB.prepare(countQuery).bind(...params).first('count');
+    const total = await env.DB.prepare(countQuery).bind(...params).first('count');
 
     // Fetch page
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
-
     const { results } = await env.DB.prepare(query).bind(...params).all();
 
     return jsonResponse({
         data: results,
-        pagination: {
-            page,
-            limit,
-            total: totalResult,
-            total_pages: Math.ceil(totalResult / limit),
-        },
+        pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
     });
 }
 
+/**
+ * Get a single worker with their certifications and documents.
+ */
 async function getWorker(env, id) {
     const worker = await env.DB.prepare('SELECT * FROM workers WHERE id = ?').bind(id).first();
+    if (!worker) return errorResponse('Worker not found', 404);
 
-    if (!worker) {
-        return errorResponse('Worker not found', 404);
-    }
-
-    // Also fetch associated certificates
-    const { results: certificates } = await env.DB.prepare(
-        'SELECT * FROM certificates WHERE worker_id = ? ORDER BY created_at DESC'
+    const { results: certifications } = await env.DB.prepare(
+        'SELECT * FROM certifications WHERE worker_id = ? ORDER BY created_at DESC'
     ).bind(id).all();
 
-    return jsonResponse({ ...worker, certificates });
+    const { results: documents } = await env.DB.prepare(
+        'SELECT * FROM documents WHERE worker_id = ? ORDER BY created_at DESC'
+    ).bind(id).all();
+
+    // Add signed file URLs to documents
+    const docsWithUrls = documents.map(d => ({
+        ...d,
+        file_url: `/api/files/${encodeURIComponent(d.r2_key)}`,
+    }));
+
+    return jsonResponse({ ...worker, certifications, documents: docsWithUrls });
 }
 
-async function createWorker(request, env) {
-    const body = await request.json();
-    const { fin, name, work_permit_no, employer, sector, nationality, date_of_birth, occupation, permit_status, issue_date, expiry_date, remarks } = body;
-
-    if (!fin || !name) {
-        return errorResponse('FIN and Name are required', 400);
-    }
-
-    try {
-        const result = await env.DB.prepare(
-            `INSERT INTO workers (fin, name, work_permit_no, employer, sector, nationality, date_of_birth, occupation, permit_status, issue_date, expiry_date, remarks)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).bind(
-            fin.toUpperCase(),
-            name.toUpperCase(),
-            work_permit_no || null,
-            employer ? employer.toUpperCase() : null,
-            sector || null,
-            nationality || null,
-            date_of_birth || null,
-            occupation || null,
-            permit_status || 'active',
-            issue_date || null,
-            expiry_date || null,
-            remarks || null
-        ).run();
-
-        const newWorker = await env.DB.prepare('SELECT * FROM workers WHERE id = ?')
-            .bind(result.meta.last_row_id).first();
-
-        return createdResponse(newWorker);
-    } catch (err) {
-        if (err.message.includes('UNIQUE')) {
-            return errorResponse('A worker with this FIN or Work Permit No already exists', 409);
-        }
-        throw err;
-    }
-}
-
-async function updateWorker(request, env, id) {
-    const existing = await env.DB.prepare('SELECT * FROM workers WHERE id = ?').bind(id).first();
-    if (!existing) {
-        return errorResponse('Worker not found', 404);
-    }
-
-    const body = await request.json();
-    const fields = ['fin', 'name', 'work_permit_no', 'employer', 'sector', 'nationality', 'date_of_birth', 'occupation', 'permit_status', 'issue_date', 'expiry_date', 'photo_key', 'remarks'];
-
-    const updates = [];
-    const values = [];
-
-    for (const field of fields) {
-        if (body[field] !== undefined) {
-            updates.push(`${field} = ?`);
-            const val = body[field];
-            // Uppercase text fields
-            if (['fin', 'name', 'employer'].includes(field) && typeof val === 'string') {
-                values.push(val.toUpperCase());
-            } else {
-                values.push(val);
-            }
-        }
-    }
-
-    if (updates.length === 0) {
-        return errorResponse('No fields to update', 400);
-    }
-
-    updates.push("updated_at = datetime('now')");
-    values.push(id);
-
-    await env.DB.prepare(
-        `UPDATE workers SET ${updates.join(', ')} WHERE id = ?`
-    ).bind(...values).run();
-
-    const updated = await env.DB.prepare('SELECT * FROM workers WHERE id = ?').bind(id).first();
-    return jsonResponse(updated);
-}
-
+/**
+ * Delete a worker and their associated data.
+ */
 async function deleteWorker(env, id) {
     const existing = await env.DB.prepare('SELECT * FROM workers WHERE id = ?').bind(id).first();
-    if (!existing) {
-        return errorResponse('Worker not found', 404);
+    if (!existing) return errorResponse('Worker not found', 404);
+
+    // Delete associated documents from R2
+    const { results: docs } = await env.DB.prepare(
+        'SELECT r2_key FROM documents WHERE worker_id = ?'
+    ).bind(id).all();
+
+    for (const doc of docs) {
+        try { await env.BUCKET.delete(doc.r2_key); } catch (e) { /* ignore */ }
     }
 
+    // Delete worker photo from R2 if exists
+    if (existing.photo_key) {
+        try { await env.BUCKET.delete(existing.photo_key); } catch (e) { /* ignore */ }
+    }
+
+    // Cascade deletes in DB
+    await env.DB.prepare('DELETE FROM documents WHERE worker_id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM certifications WHERE worker_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM workers WHERE id = ?').bind(id).run();
-    return noContentResponse();
+
+    return jsonResponse({ success: true, message: 'Worker deleted' });
 }
