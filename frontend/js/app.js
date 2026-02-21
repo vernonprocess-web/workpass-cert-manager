@@ -371,18 +371,19 @@ const App = (() => {
     XLSX.utils.book_append_sheet(wb, wsDetails, "Sheet 1");
 
     // ==========================================
-    // Sheet 2+: Certifications (chunks of 6)
+    // Sheet 2+: Certifications (chunks of 8)
     // ==========================================
     const certs = w.certifications || [];
+    let lastSheetIndex = 2;
 
     if (certs.length === 0) {
       // Create empty sheet 2 if no certs
       const wsEmptyCerts = XLSX.utils.aoa_to_sheet([["No certifications found."]]);
       XLSX.utils.book_append_sheet(wb, wsEmptyCerts, "Sheet 2");
     } else {
-      // Chunk certifications (max 6 per sheet)
-      for (let i = 0; i < certs.length; i += 6) {
-        const chunk = certs.slice(i, i + 6);
+      // Chunk certifications (max 8 per sheet)
+      for (let i = 0; i < certs.length; i += 8) {
+        const chunk = certs.slice(i, i + 8);
         const chunkData = [
           ["CERTIFICATIONS"],
           [],
@@ -412,10 +413,50 @@ const App = (() => {
         ];
 
         // Sheet index starts at 2
-        const sheetIndex = (i / 6) + 2;
-        XLSX.utils.book_append_sheet(wb, wsCerts, `Sheet ${sheetIndex}`);
+        lastSheetIndex = Math.floor(i / 8) + 2;
+        XLSX.utils.book_append_sheet(wb, wsCerts, `Sheet ${lastSheetIndex}`);
       }
     }
+
+    // ==========================================
+    // Final Sheet: Scanned Certs (Documents)
+    // ==========================================
+    const docs = w.documents || [];
+    const docsData = [
+      ["SCANNED CERTIFICATES / DOCUMENTS"],
+      [],
+      ["DOCUMENT NAME", "DOCUMENT TYPE", "UPLOAD DATE", "LINK"]
+    ];
+
+    if (docs.length === 0) {
+      docsData.push(["No scanned documents uploaded."]);
+    } else {
+      docs.forEach(d => {
+        docsData.push([
+          d.original_name || d.document_type || 'Document',
+          d.document_type || 'Unknown',
+          d.created_at ? formatDate(d.created_at) : '',
+          API.getFileUrl(d.r2_key) || d.url || ''
+        ]);
+      });
+    }
+
+    const wsDocs = XLSX.utils.aoa_to_sheet(docsData);
+    wsDocs['!cols'] = [{ wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 70 }];
+
+    // Add Hyperlinks to the 4th column (LINK)
+    if (docs.length > 0) {
+      for (let i = 0; i < docs.length; i++) {
+        // Row 3 is index 3 (0-based: 0=Header, 1=Empty, 2=Columns, 3=First Data)
+        const cellRef = XLSX.utils.encode_cell({ c: 3, r: i + 3 });
+        if (wsDocs[cellRef]) {
+          wsDocs[cellRef].l = { Target: wsDocs[cellRef].v, Tooltip: "Click to view scanned document" };
+        }
+      }
+    }
+
+    // Append Scanned Certs as the next sheet
+    XLSX.utils.book_append_sheet(wb, wsDocs, `Sheet ${lastSheetIndex + 1} (Scans)`);
 
     // Trigger Download
     const fileName = `${w.worker_name.replace(/[^a-z0-9]/gi, '_')}_${w.fin_number}_Profile.xlsx`;
