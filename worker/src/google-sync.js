@@ -128,7 +128,7 @@ export async function exportMultipleWorkersToSheet(env, workers) {
     try {
         await ensureSheetExists(apiKey, sheetId, sheetName);
 
-        const existingData = await readSheet(apiKey, sheetId, `${sheetName}!A:J`);
+        const existingData = await readSheet(apiKey, sheetId, `'${sheetName}'!A:J`);
         const rows = existingData.values || [];
 
         const valuesToAppend = [];
@@ -158,7 +158,7 @@ export async function exportMultipleWorkersToSheet(env, workers) {
         }
 
         if (valuesToAppend.length > 0) {
-            await appendSheet(apiKey, sheetId, `${sheetName}!A:J`, valuesToAppend);
+            await appendSheet(apiKey, sheetId, `'${sheetName}'!A:J`, valuesToAppend);
         }
     } catch (err) {
         throw new Error(`Google Sheets export error: ${err.message}`);
