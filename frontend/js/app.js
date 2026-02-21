@@ -479,6 +479,7 @@ const App = (() => {
 
           const compressedImg = await new Promise((resolve, reject) => {
             const img = new Image();
+            img.crossOrigin = 'Anonymous'; // Required to draw external R2 URLs to canvas
             img.onload = () => {
               URL.revokeObjectURL(objectUrl);
               const canvas = document.createElement('canvas');
@@ -545,10 +546,15 @@ const App = (() => {
         wsDocs.addRow(['No scanned documents found.']);
       } else {
         // We have images, chunk them by 8 per sheet
-        const IMG_WIDTH = 600;
-        const IMG_HEIGHT = 400;
-        // ExcelJS row height is points. Approx 1 pixel = 0.75 points. 400px = ~300 points
-        const ROW_HEIGHT = 310;
+        // 2.5 inches by 3.75 inches.
+        // ExcelJS uses standard pixels (96 DPI).
+        // 2.5 inches * 96 = 240px width
+        // 3.75 inches * 96 = 360px height
+        const IMG_WIDTH = 240;
+        const IMG_HEIGHT = 360;
+        // ExcelJS row height is in points (72 points per inch).
+        // 3.75 inches * 72 = 270 points height. Add a small margin.
+        const ROW_HEIGHT = 280;
 
         for (let i = 0; i < downloadedImages.length; i += 8) {
           const chunkImages = downloadedImages.slice(i, i + 8);
