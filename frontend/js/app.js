@@ -511,15 +511,12 @@ const App = (() => {
               ctx.drawImage(img, 0, 0, width, height);
 
               // Compress slightly as standard JPEG
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-              const base64 = dataUrl.split(',')[1];
-              const binaryString = window.atob(base64);
-              const len = binaryString.length;
-              const bytes = new Uint8Array(len);
-              for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+              if (dataUrl.length < 100) {
+                reject(new Error('Canvas generated empty image data'));
+                return;
               }
-              resolve({ buffer: bytes.buffer, extension: 'jpeg' });
+              resolve({ base64: dataUrl, extension: 'jpeg' });
             };
             img.onerror = () => {
               URL.revokeObjectURL(objectUrl);
@@ -530,7 +527,7 @@ const App = (() => {
 
           // Add standardized, compressed image to workbook registry
           const imageId = wb.addImage({
-            buffer: compressedImg.buffer,
+            base64: compressedImg.base64,
             extension: compressedImg.extension,
           });
 
@@ -546,22 +543,22 @@ const App = (() => {
         wsDocs.addRow(['No scanned documents found.']);
       } else {
         // We have images, chunk them by 8 per sheet
-        // 2.5 inches by 3.75 inches.
+        // Use exact dimensions requested: Width 4.02", Height 2.5"
         // ExcelJS uses standard pixels (96 DPI).
-        // 2.5 inches * 96 = 240px width
-        // 3.75 inches * 96 = 360px height
-        const IMG_WIDTH = 240;
-        const IMG_HEIGHT = 360;
+        // 4.02 inches * 96 = 386px width
+        // 2.5 inches * 96 = 240px height
+        const IMG_WIDTH = 386;
+        const IMG_HEIGHT = 240;
         // ExcelJS row height is in points (72 points per inch).
-        // 3.75 inches * 72 = 270 points height. Add a small margin.
-        const ROW_HEIGHT = 280;
+        // 2.5 inches * 72 = 180 points height. Add a small 10pt margin.
+        const ROW_HEIGHT = 190;
 
         for (let i = 0; i < downloadedImages.length; i += 8) {
           const chunkImages = downloadedImages.slice(i, i + 8);
           lastSheetIndex++;
           const wsDocs = wb.addWorksheet(`Sheet ${lastSheetIndex}`);
 
-          wsDocs.columns = [{ width: 100 }]; // Single very wide column
+          wsDocs.columns = [{ width: 55 }]; // Sized proportionally to fit 4.02 inches
 
           chunkImages.forEach((imgId, index) => {
             // Add a row specifically sized for this image
