@@ -126,8 +126,6 @@ export async function exportMultipleWorkersToSheet(env, workers) {
     const sheetName = 'Export Data';
 
     try {
-        await ensureSheetExists(apiKey, sheetId, sheetName);
-
         const existingData = await readSheet(apiKey, sheetId, `'${sheetName}'!A:J`);
         const rows = existingData.values || [];
 
@@ -161,6 +159,9 @@ export async function exportMultipleWorkersToSheet(env, workers) {
             await appendSheet(apiKey, sheetId, `'${sheetName}'!A:J`, valuesToAppend);
         }
     } catch (err) {
+        if (err.message.includes('Unable to parse range')) {
+            throw new Error(`Please create a new tab named "Export Data" in your connected Google Sheet first.`);
+        }
         throw new Error(`Google Sheets export error: ${err.message}`);
     }
 }
@@ -203,23 +204,4 @@ async function appendSheet(apiKey, sheetId, range, values) {
         throw new Error(`Sheets append failed: ${err}`);
     }
     return res.json();
-}
-
-async function ensureSheetExists(apiKey, sheetId, title) {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?key=${apiKey}`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const data = await res.json();
-    const sheetExists = data.sheets?.some(s => s.properties?.title === title);
-
-    if (!sheetExists) {
-        const createUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate?key=${apiKey}`;
-        await fetch(createUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                requests: [{ addSheet: { properties: { title } } }]
-            })
-        });
-    }
 }
