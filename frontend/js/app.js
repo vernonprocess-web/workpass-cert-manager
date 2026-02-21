@@ -338,129 +338,213 @@ const App = (() => {
     }
   }
 
-  function exportWorkerProfile() {
+  async function exportWorkerProfile() {
     if (!currentWorkerProfile) return;
 
-    // Create new workbook
-    const wb = XLSX.utils.book_new();
+    // Change button state
+    const exportBtn = document.getElementById('btn-export-profile');
+    const originalText = exportBtn.innerHTML;
+    exportBtn.innerHTML = 'Generating Excel...';
+    exportBtn.disabled = true;
 
-    // ==========================================
-    // Sheet 1: Worker Details
-    // ==========================================
-    const w = currentWorkerProfile;
-    const detailsData = [
-      ["WORKER DETAILS"],
-      [],
-      ["FIN / NRIC Number", w.fin_number || ''],
-      ["Work Permit No", w.work_permit_no || ''],
-      ["Worker Name", w.worker_name || ''],
-      ["Date of Birth", w.date_of_birth || ''],
-      ["Nationality", w.nationality || ''],
-      ["Sex", w.sex || ''],
-      ["Race", w.race || ''],
-      ["Country/Place of Birth", w.country_of_birth || ''],
-      ["Address", w.address || ''],
-      ["Employer", w.employer_name || ''],
-      ["WP Expiry Date", w.wp_expiry_date || ''],
-      ["Created", w.created_at ? formatDate(w.created_at) : '']
-    ];
+    try {
+      // Create new workbook using ExcelJS
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'WorkPass & Cert Manager';
+      wb.lastModifiedBy = 'System';
+      wb.created = new Date();
+      wb.modified = new Date();
 
-    const wsDetails = XLSX.utils.aoa_to_sheet(detailsData);
-    // Auto-size columns to be wider
-    wsDetails['!cols'] = [{ wch: 25 }, { wch: 40 }];
-    XLSX.utils.book_append_sheet(wb, wsDetails, "Sheet 1");
+      const w = currentWorkerProfile;
 
-    // ==========================================
-    // Sheet 2+: Certifications (chunks of 8)
-    // ==========================================
-    const certs = w.certifications || [];
-    let lastSheetIndex = 2;
+      // ==========================================
+      // Sheet 1: Worker Details
+      // ==========================================
+      const wsDetails = wb.addWorksheet('Sheet 1');
 
-    if (certs.length === 0) {
-      // Create empty sheet 2 if no certs
-      const wsEmptyCerts = XLSX.utils.aoa_to_sheet([["No certifications found."]]);
-      XLSX.utils.book_append_sheet(wb, wsEmptyCerts, "Sheet 2");
-    } else {
-      // Chunk certifications (max 8 per sheet)
-      for (let i = 0; i < certs.length; i += 8) {
-        const chunk = certs.slice(i, i + 8);
-        const chunkData = [
-          ["CERTIFICATIONS"],
-          [],
-          ["COURSE", "PROVIDER", "S/N", "DURATION", "ISSUE", "EXPIRY"]
-        ];
+      wsDetails.columns = [
+        { header: 'Field', key: 'field', width: 25 },
+        { header: 'Value', key: 'value', width: 40 }
+      ];
 
-        chunk.forEach(c => {
-          chunkData.push([
-            c.course_title || '',
-            c.course_provider || '',
-            c.cert_serial_no || '',
-            c.course_duration || '',
-            c.issue_date || '',
-            c.expiry_date || ''
-          ]);
-        });
+      // We don't want standard headers for the simple layout
+      wsDetails.getRow(1).values = ['WORKER DETAILS'];
+      wsDetails.getRow(1).font = { bold: true, size: 14 };
 
-        const wsCerts = XLSX.utils.aoa_to_sheet(chunkData);
-        // Auto-size certification columns
-        wsCerts['!cols'] = [
-          { wch: 45 }, // Course
-          { wch: 30 }, // Provider
-          { wch: 20 }, // S/N
-          { wch: 15 }, // Duration
-          { wch: 15 }, // Issue
-          { wch: 15 }  // Expiry
-        ];
+      wsDetails.addRow([]); // empty row
 
-        // Sheet index starts at 2
-        lastSheetIndex = Math.floor(i / 8) + 2;
-        XLSX.utils.book_append_sheet(wb, wsCerts, `Sheet ${lastSheetIndex}`);
-      }
-    }
+      const detailsRows = [
+        ["FIN / NRIC Number", w.fin_number || ''],
+        ["Work Permit No", w.work_permit_no || ''],
+        ["Worker Name", w.worker_name || ''],
+        ["Date of Birth", w.date_of_birth || ''],
+        ["Nationality", w.nationality || ''],
+        ["Sex", w.sex || ''],
+        ["Race", w.race || ''],
+        ["Country/Place of Birth", w.country_of_birth || ''],
+        ["Address", w.address || ''],
+        ["Employer", w.employer_name || ''],
+        ["WP Expiry Date", w.wp_expiry_date || ''],
+        ["Created", w.created_at ? formatDate(w.created_at) : '']
+      ];
 
-    // ==========================================
-    // Final Sheet: Scanned Certs (Documents)
-    // ==========================================
-    const docs = w.documents || [];
-    const docsData = [
-      ["SCANNED CERTIFICATES / DOCUMENTS"],
-      [],
-      ["DOCUMENT NAME", "DOCUMENT TYPE", "UPLOAD DATE", "LINK"]
-    ];
+      detailsRows.forEach(row => wsDetails.addRow(row));
 
-    if (docs.length === 0) {
-      docsData.push(["No scanned documents uploaded."]);
-    } else {
-      docs.forEach(d => {
-        docsData.push([
-          d.original_name || d.document_type || 'Document',
-          d.document_type || 'Unknown',
-          d.created_at ? formatDate(d.created_at) : '',
-          API.getFileUrl(d.r2_key) || d.url || ''
-        ]);
+      // Style details
+      wsDetails.eachRow((row, rowNumber) => {
+        if (rowNumber > 2) {
+          row.getCell(1).font = { bold: true };
+          row.getCell(1).alignment = { vertical: 'middle' };
+          row.getCell(2).alignment = { vertical: 'middle', wrapText: true };
+        }
       });
-    }
 
-    const wsDocs = XLSX.utils.aoa_to_sheet(docsData);
-    wsDocs['!cols'] = [{ wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 70 }];
+      // ==========================================
+      // Sheet 2+: Certifications (chunks of 8)
+      // ==========================================
+      const certs = w.certifications || [];
+      let lastSheetIndex = 2;
 
-    // Add Hyperlinks to the 4th column (LINK)
-    if (docs.length > 0) {
-      for (let i = 0; i < docs.length; i++) {
-        // Row 3 is index 3 (0-based: 0=Header, 1=Empty, 2=Columns, 3=First Data)
-        const cellRef = XLSX.utils.encode_cell({ c: 3, r: i + 3 });
-        if (wsDocs[cellRef]) {
-          wsDocs[cellRef].l = { Target: wsDocs[cellRef].v, Tooltip: "Click to view scanned document" };
+      if (certs.length === 0) {
+        const wsEmptyCerts = wb.addWorksheet('Sheet 2');
+        wsEmptyCerts.addRow(['No certifications found.']);
+      } else {
+        for (let i = 0; i < certs.length; i += 8) {
+          const chunk = certs.slice(i, i + 8);
+          lastSheetIndex = Math.floor(i / 8) + 2;
+          const wsCerts = wb.addWorksheet(`Sheet ${lastSheetIndex}`);
+
+          wsCerts.columns = [
+            { header: 'COURSE', key: 'course', width: 45 },
+            { header: 'PROVIDER', key: 'provider', width: 30 },
+            { header: 'S/N', key: 'sn', width: 20 },
+            { header: 'DURATION', key: 'duration', width: 15 },
+            { header: 'ISSUE', key: 'issue', width: 15 },
+            { header: 'EXPIRY', key: 'expiry', width: 15 }
+          ];
+
+          wsCerts.insertRow(1, ['CERTIFICATIONS']);
+          wsCerts.getRow(1).font = { bold: true, size: 14 };
+          wsCerts.insertRow(2, []); // empty row
+
+          // Re-apply headers visually on row 3 since we pushed them down
+          const headerRow = wsCerts.getRow(3);
+          headerRow.values = ['COURSE', 'PROVIDER', 'S/N', 'DURATION', 'ISSUE', 'EXPIRY'];
+          headerRow.font = { bold: true };
+          headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+
+          chunk.forEach(c => {
+            wsCerts.addRow([
+              c.course_title || '',
+              c.course_provider || '',
+              c.cert_serial_no || '',
+              c.course_duration || '',
+              c.issue_date || '',
+              c.expiry_date || ''
+            ]);
+          });
+
+          // Wrap text on cert sheets
+          wsCerts.eachRow((row) => {
+            row.alignment = { vertical: 'middle', wrapText: true };
+          });
         }
       }
+
+      // ==========================================
+      // Final Sheets: Embedded Scanned Docs (chunks of 8)
+      // ==========================================
+      const docs = w.documents || [];
+      exportBtn.innerHTML = `Fetching ${docs.length} Scans...`;
+
+      // Pre-download all images into ArrayBuffers
+      const downloadedImages = [];
+      for (const d of docs) {
+        const docUrl = API.getFileUrl(d.r2_key) || d.url;
+        if (!docUrl) continue;
+
+        try {
+          const response = await fetch(docUrl);
+          if (!response.ok) continue;
+
+          const arrayBuffer = await response.arrayBuffer();
+          // Detect simple mime type from extension or fallback
+          const ext = docUrl.split('.').pop().toLowerCase();
+          const pType = (ext === 'png') ? 'png' : 'jpeg';
+
+          // Add image to workbook registry
+          const imageId = wb.addImage({
+            buffer: arrayBuffer,
+            extension: pType,
+          });
+
+          downloadedImages.push(imageId);
+        } catch (e) {
+          console.warn(`Failed to fetch doc: ${docUrl}`, e);
+        }
+      }
+
+      if (downloadedImages.length === 0) {
+        // No images
+        const wsDocs = wb.addWorksheet(`Sheet ${lastSheetIndex + 1}`);
+        wsDocs.addRow(['No scanned documents found.']);
+      } else {
+        // We have images, chunk them by 8 per sheet
+        const IMG_WIDTH = 600;
+        const IMG_HEIGHT = 400;
+        // ExcelJS row height is points. Approx 1 pixel = 0.75 points. 400px = ~300 points
+        const ROW_HEIGHT = 310;
+
+        for (let i = 0; i < downloadedImages.length; i += 8) {
+          const chunkImages = downloadedImages.slice(i, i + 8);
+          lastSheetIndex++;
+          const wsDocs = wb.addWorksheet(`Sheet ${lastSheetIndex}`);
+
+          wsDocs.columns = [{ width: 100 }]; // Single very wide column
+
+          chunkImages.forEach((imgId, index) => {
+            // Add a row specifically sized for this image
+            const rowNo = index + 1; // 1-based index 
+            const row = wsDocs.getRow(rowNo);
+            row.height = ROW_HEIGHT;
+
+            // Add image over the cell
+            wsDocs.addImage(imgId, {
+              tl: { col: 0, row: rowNo - 1 }, // tl is 0-indexed
+              ext: { width: IMG_WIDTH, height: IMG_HEIGHT },
+              editAs: 'oneCell'
+            });
+          });
+        }
+      }
+
+      // ==========================================
+      // Trigger Download
+      // ==========================================
+      exportBtn.innerHTML = `Saving...`;
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const fileName = `${w.worker_name.replace(/[^a-z0-9]/gi, '_')}_${w.fin_number}_Profile.xlsx`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast('Profile exported successfully', 'success');
+
+    } catch (err) {
+      console.error(err);
+      showToast('Export failed: ' + err.message, 'error');
+    } finally {
+      exportBtn.innerHTML = originalText;
+      exportBtn.disabled = false;
     }
-
-    // Append Scanned Certs as the next sheet
-    XLSX.utils.book_append_sheet(wb, wsDocs, `Sheet ${lastSheetIndex + 1} (Scans)`);
-
-    // Trigger Download
-    const fileName = `${w.worker_name.replace(/[^a-z0-9]/gi, '_')}_${w.fin_number}_Profile.xlsx`;
-    XLSX.writeFile(wb, fileName);
   }
 
   // ═══════════════════════════════════════════════════════
