@@ -191,6 +191,7 @@ function parseOCRText(rawText, documentType) {
         address: null,
         country_of_birth: null,
         employer_name: null,
+        wp_expiry_date: null,
         course_title: null,
         course_provider: null,
         cert_serial_no: null,
@@ -702,10 +703,30 @@ function parseOCRText(rawText, documentType) {
         }
     }
 
-    // Expiry Date
+    // Expiry Date — route to wp_expiry_date for WP/IC, expiry_date for certs
     const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP\.?)\s*[:\-]?\s*(\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4})/);
     if (expiryMatch) {
-        result.expiry_date = formatDate(expiryMatch[1]);
+        const parsedExpiry = formatDate(expiryMatch[1]);
+        if ((isWorkPermit || isIdentityCard) && !isCertification) {
+            result.wp_expiry_date = parsedExpiry;
+        } else {
+            result.expiry_date = parsedExpiry;
+        }
+    }
+
+    // Text-month expiry: "Valid Until 15 June 2027"
+    if (!result.wp_expiry_date && !result.expiry_date) {
+        const expiryTmMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP\.?)\s*[:\-]?\s*(\d{1,2}[\s\-](?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s*[,\-]?\s*\d{4})/i);
+        if (expiryTmMatch) {
+            const parsedTm = parseTextMonthDate(expiryTmMatch[1]);
+            if (parsedTm) {
+                if ((isWorkPermit || isIdentityCard) && !isCertification) {
+                    result.wp_expiry_date = parsedTm;
+                } else {
+                    result.expiry_date = parsedTm;
+                }
+            }
+        }
     }
 
     // "Validity: No Expiry" / "Validity Period: NIL" handling
@@ -738,10 +759,16 @@ function parseOCRText(rawText, documentType) {
         const remaining = sorted.filter(d => d !== result.date_of_birth);
         if (remaining.length >= 2) {
             result.issue_date = remaining[0];
-            result.expiry_date = remaining[remaining.length - 1];
+            if ((isWorkPermit || isIdentityCard) && !isCertification) {
+                result.wp_expiry_date = result.wp_expiry_date || remaining[remaining.length - 1];
+            } else {
+                result.expiry_date = remaining[remaining.length - 1];
+            }
         } else if (remaining.length === 1) {
             if (isCertification) {
                 result.issue_date = remaining[0];
+            } else if (isWorkPermit || isIdentityCard) {
+                result.wp_expiry_date = result.wp_expiry_date || remaining[0];
             } else {
                 result.expiry_date = remaining[0];
             }

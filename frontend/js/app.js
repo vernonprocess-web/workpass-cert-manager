@@ -124,34 +124,35 @@ const App = (() => {
       const workers = result.data || [];
 
       if (workers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No workers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No workers found</td></tr>';
       } else {
         tbody.innerHTML = workers.map(w => `
-                    <tr>
-                        <td><strong style="color:var(--accent-primary);cursor:pointer" onclick="Router.navigate('worker-profile','${w.id}')">${esc(w.fin_number)}</strong></td>
-                        <td>${esc(w.work_permit_no || '—')}</td>
-                        <td>${esc(w.worker_name)}</td>
-                        <td>${esc(w.date_of_birth || '—')}</td>
-                        <td>${esc(w.nationality || '—')}</td>
-                        <td>${esc(w.sex || '—')}</td>
-                        <td>${esc(w.employer_name || '—')}</td>
-                        <td>
-                            <div class="action-btns">
-                                <button class="action-btn action-btn--view" title="View" onclick="Router.navigate('worker-profile','${w.id}')">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                </button>
-                                <button class="action-btn action-btn--danger" title="Delete" onclick="deleteWorkerConfirm(${w.id},'${esc(w.worker_name)}')">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
+                        <tr>
+                            <td><strong style="color:var(--accent-primary);cursor:pointer" onclick="Router.navigate('worker-profile','${w.id}')">${esc(w.fin_number)}</strong></td>
+                            <td>${esc(w.work_permit_no || '—')}</td>
+                            <td>${esc(w.worker_name)}</td>
+                            <td>${esc(w.date_of_birth || '—')}</td>
+                            <td>${esc(w.nationality || '—')}</td>
+                            <td>${esc(w.sex || '—')}</td>
+                            <td>${esc(w.employer_name || '—')}</td>
+                            <td>${expiryBadge(w.wp_expiry_date)}</td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn action-btn--view" title="View" onclick="Router.navigate('worker-profile','${w.id}')">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </button>
+                                    <button class="action-btn action-btn--danger" title="Delete" onclick="deleteWorkerConfirm(${w.id},'${esc(w.worker_name)}')">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                 `).join('');
       }
 
       renderPagination('workers-pagination', result.pagination, (p) => { workersPage = p; loadWorkers(); });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
     }
   }
 
@@ -182,6 +183,7 @@ const App = (() => {
                 <div class="profile-field"><span class="profile-field-label">Country/Place of Birth</span><span class="profile-field-value">${esc(worker.country_of_birth || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Address</span><span class="profile-field-value">${esc(worker.address || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Employer</span><span class="profile-field-value">${esc(worker.employer_name || '—')}</span></div>
+                <div class="profile-field"><span class="profile-field-label">WP Expiry Date</span><span class="profile-field-value">${expiryBadge(worker.wp_expiry_date)}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Created</span><span class="profile-field-value">${formatDate(worker.created_at)}</span></div>
             `;
 
@@ -460,6 +462,7 @@ const App = (() => {
       // Populate OCR fields with merged data
       setInputValue('ocr-fin', merged.fin_number || '');
       setInputValue('ocr-wp-no', merged.work_permit_no || '');
+      setInputValue('ocr-wp-expiry', merged.wp_expiry_date || '');
       setInputValue('ocr-name', merged.worker_name || '');
       setInputValue('ocr-dob', merged.date_of_birth || '');
       setInputValue('ocr-nationality', merged.nationality || '');
@@ -518,6 +521,7 @@ const App = (() => {
         country_of_birth: document.getElementById('ocr-country-birth')?.value?.trim() || null,
         address: document.getElementById('ocr-address')?.value?.trim() || null,
         employer_name: document.getElementById('ocr-employer')?.value || null,
+        wp_expiry_date: document.getElementById('ocr-wp-expiry')?.value || null,
       };
 
       const worker = await API.createWorker(workerData);

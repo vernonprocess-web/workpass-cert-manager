@@ -50,7 +50,7 @@ export async function handleWorkers(request, env, path) {
  */
 async function upsertWorker(request, env) {
     const body = await request.json();
-    const { fin_number, worker_name, work_permit_no, date_of_birth, nationality, sex, race, address, country_of_birth, employer_name } = body;
+    const { fin_number, worker_name, work_permit_no, date_of_birth, nationality, sex, race, address, country_of_birth, employer_name, wp_expiry_date } = body;
 
     if (!fin_number || !worker_name) {
         return errorResponse('fin_number and worker_name are required', 400);
@@ -80,6 +80,7 @@ async function upsertWorker(request, env) {
                 address = COALESCE(?, address),
                 country_of_birth = COALESCE(?, country_of_birth),
                 employer_name = COALESCE(?, employer_name),
+                wp_expiry_date = COALESCE(?, wp_expiry_date),
                 updated_at = datetime('now')
             WHERE fin_number = ?
         `).bind(
@@ -92,6 +93,7 @@ async function upsertWorker(request, env) {
             address ? address.trim() : null,
             country_of_birth ? country_of_birth.toUpperCase().trim() : null,
             employer_name ? employer_name.toUpperCase().trim() : null,
+            wp_expiry_date || null,
             cleanFin
         ).run();
 
@@ -99,8 +101,8 @@ async function upsertWorker(request, env) {
     } else {
         // Create new worker
         const result = await env.DB.prepare(`
-            INSERT INTO workers (fin_number, worker_name, work_permit_no, date_of_birth, nationality, sex, race, address, country_of_birth, employer_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO workers (fin_number, worker_name, work_permit_no, date_of_birth, nationality, sex, race, address, country_of_birth, employer_name, wp_expiry_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
             cleanFin,
             cleanName,
@@ -111,7 +113,8 @@ async function upsertWorker(request, env) {
             race ? race.toUpperCase().trim() : null,
             address ? address.trim() : null,
             country_of_birth ? country_of_birth.toUpperCase().trim() : null,
-            employer_name ? employer_name.toUpperCase().trim() : null
+            employer_name ? employer_name.toUpperCase().trim() : null,
+            wp_expiry_date || null
         ).run();
 
         workerId = result.meta.last_row_id;
