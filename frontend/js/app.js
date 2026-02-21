@@ -467,20 +467,75 @@ const App = (() => {
           const response = await fetch(docUrl);
           if (!response.ok) continue;
 
-          const arrayBuffer = await response.arrayBuffer();
-          // Detect simple mime type from extension or fallback
-          const ext = docUrl.split('.').pop().toLowerCase();
-          const pType = (ext === 'png') ? 'png' : 'jpeg';
+          const blob = await response.blob();
 
-          // Add image to workbook registry
+          // Silently skip PDFs or unsupported documents that cannot be drawn directly to an image canvas
+          if (blob.type.includes('pdf') || blob.type.includes('word') || blob.type.includes('document')) {
+            console.log(`Skipping non-image document embed for ${docUrl}`);
+            continue;
+          }
+
+          const objectUrl = URL.createObjectURL(blob);
+
+          const compressedImg = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              const canvas = document.createElement('canvas');
+              let width = img.width;
+              let height = img.height;
+              const maxWidth = 800; // Lower resolution to scale to excel nicely
+              const maxHeight = 800;
+
+              if (width > height) {
+                if (width > maxWidth) {
+                  height = Math.round((height * maxWidth) / width);
+                  width = maxWidth;
+                }
+              } else {
+                if (height > maxHeight) {
+                  width = Math.round((width * maxHeight) / height);
+                  height = maxHeight;
+                }
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+
+              // Fill solid white background (stops transparent PNGs turning black in Excel)
+              ctx.fillStyle = "#FFFFFF";
+              ctx.fillRect(0, 0, width, height);
+
+              ctx.drawImage(img, 0, 0, width, height);
+
+              // Compress slightly as standard JPEG
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+              const base64 = dataUrl.split(',')[1];
+              const binaryString = window.atob(base64);
+              const len = binaryString.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              resolve({ buffer: bytes.buffer, extension: 'jpeg' });
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(objectUrl);
+              reject(new Error('Image failed to load in canvas'));
+            };
+            img.src = objectUrl;
+          });
+
+          // Add standardized, compressed image to workbook registry
           const imageId = wb.addImage({
-            buffer: arrayBuffer,
-            extension: pType,
+            buffer: compressedImg.buffer,
+            extension: compressedImg.extension,
           });
 
           downloadedImages.push(imageId);
         } catch (e) {
-          console.warn(`Failed to fetch doc: ${docUrl}`, e);
+          console.warn(`Failed to fetch and compress doc: ${docUrl}`, e);
         }
       }
 
