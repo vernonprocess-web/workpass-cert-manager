@@ -153,8 +153,10 @@ function parseOCRText(rawText, documentType) {
         text.includes('COURSE TITLE') ||
         text.includes('ISSUED DATE') ||
         text.includes('SERIAL NUMBER') ||
+        text.includes('STUDENT NUMBER') ||
         text.includes('CERTIFICATE') ||
         text.includes('CERTIFICATION') ||
+        text.includes('ACADEMY') ||
         text.includes('TRAINING') ||
         text.includes('VALIDITY');
 
@@ -165,8 +167,8 @@ function parseOCRText(rawText, documentType) {
     //    G = issued 2000–2021
     //    M = issued from 2022 onwards
     // ═══════════════════════════════════════════════════════════
-    // First try labeled "FIN" or "ID NO" pattern
-    const finLabelMatch = text.match(/(?:FIN|ID\s*NO\.?)\s*[:\-]?\s*([FGM]\d{7}[A-Z])/);
+    // First try labeled "FIN", "ID NO", or "ID Number" pattern
+    const finLabelMatch = text.match(/(?:FIN|ID\s*(?:NO|NUMBER)\.?)\s*[:\-]?\s*([FGM]\d{7}[A-Z])/);
     if (finLabelMatch) {
         result.fin_number = finLabelMatch[1];
     } else {
@@ -266,6 +268,29 @@ function parseOCRText(rawText, documentType) {
             const candidate = cleanName(nameInline[1]);
             if (isValidName(candidate)) {
                 result.worker_name = candidate;
+            }
+        }
+    }
+
+    // Fallback for certs without "Name:" label:
+    // look for a line that looks like a person name, positioned before the FIN line
+    if (!result.worker_name && isCertification && result.fin_number) {
+        const finIdx = upperLines.findIndex(l => l.includes(result.fin_number));
+        if (finIdx > 0) {
+            // Scan backwards from FIN for a name-like line
+            for (let i = finIdx - 1; i >= 0 && i >= finIdx - 3; i--) {
+                const line = upperLines[i].trim();
+                // Must be mostly uppercase letters, spaces, and common name chars
+                if (line.match(/^[A-Z][A-Z\s.'\-\/]{4,}$/) &&
+                    !line.match(/ACADEMY|PTE|LTD|COURSE|CERTIFICATE|TRAINING|PERFORM|HEIGHT|SAFETY|WORK|SINGAPORE|QUALIFICATION/) &&
+                    !line.match(/SERIAL|STUDENT|NUMBER|ISSUED|VALID|VENUE|GLOBAL/) &&
+                    !line.match(/^[FGM]\d{7}[A-Z]$/)) {
+                    const candidate = cleanName(line);
+                    if (isValidName(candidate) && candidate.split(/\s+/).length >= 2) {
+                        result.worker_name = candidate;
+                        break;
+                    }
+                }
             }
         }
     }
@@ -385,9 +410,11 @@ function parseOCRText(rawText, documentType) {
         result.expiry_date = formatDate(expiryMatch[1]);
     }
 
-    // "Validity: No Expiry" handling
-    if (!result.expiry_date && text.match(/VALIDITY\s*[:\-]?\s*NO\s*EXPIRY/)) {
-        result.expiry_date = 'No Expiry';
+    // "Validity: No Expiry" / "Validity Period: NIL" handling
+    if (!result.expiry_date) {
+        if (text.match(/VALIDITY\s*(?:PERIOD)?\s*[:\-]?\s*(?:NO\s*EXPIRY|NIL|N\/A|NONE|LIFETIME|NO\s*LIMIT)/)) {
+            result.expiry_date = 'No Expiry';
+        }
     }
 
     // Collect all dates for fallback
@@ -425,19 +452,20 @@ function parseOCRText(rawText, documentType) {
 
     // ═══════════════════════════════════════════════════════════
     // 9. CERT SERIAL NUMBER (S/N)
-    //    e.g. "S/N WAHRC-2025-B134P-659" or "S/N: ABC-123"
-    //    OR  "Serial Number: 0226-02901"
+    //    Patterns: "S/N WAHRC-2025-B134P-659"
+    //              "Serial Number: 0226-02901"
+    //              "Student Number: WPH-GMS-1110-1.1-1292"
     // ═══════════════════════════════════════════════════════════
 
-    // Pattern 1: "Serial Number: 0226-02901"
-    const serialNumMatch = text.match(/SERIAL\s*(?:NUMBER|NO\.?)\s*[:\-]?\s*([\dA-Z][\dA-Z\-]+)/i);
+    // Pattern 1: "Serial Number:" or "Student Number:" (numbers/letters/hyphens/dots)
+    const serialNumMatch = text.match(/(?:SERIAL|STUDENT)\s*(?:NUMBER|NO\.?)\s*[:\-]?\s*([\dA-Z][\dA-Z\-\.]+)/i);
     if (serialNumMatch) {
         result.cert_serial_no = serialNumMatch[1].trim();
     }
 
-    // Pattern 2: "S/N WAHRC-2025-B134P-659"
+    // Pattern 2: "S/N WAHRC-2025-B134P-659" (inline)
     if (!result.cert_serial_no) {
-        const snMatch = text.match(/S\/N\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-]+)/);
+        const snMatch = text.match(/S\/N\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\.]+)/);
         if (snMatch) {
             result.cert_serial_no = snMatch[1].trim();
         }
@@ -449,7 +477,7 @@ function parseOCRText(rawText, documentType) {
             if (upperLines[i].match(/^S\/N\s*$/)) {
                 if (i + 1 < upperLines.length) {
                     const nextLine = upperLines[i + 1].trim();
-                    if (nextLine.match(/^[A-Z0-9][A-Z0-9\-]+$/)) {
+                    if (nextLine.match(/^[A-Z0-9][A-Z0-9\-\.]+$/)) {
                         result.cert_serial_no = nextLine;
                     }
                 }
@@ -470,6 +498,8 @@ function parseOCRText(rawText, documentType) {
         'SAFETY', 'RESCUE', 'WELDING', 'RIGGING', 'SCAFFOLD',
         'ELECTRICAL', 'PLUMBING', 'CRANE', 'FORKLIFT', 'HEIGHT',
         'CORETRADE', 'MULTI-SKILL', 'SEC(K)', 'FIRST AID',
+        'PERFORM', 'LIFTING', 'OPERATIONS', 'SUPERVISE',
+        'CONFINED', 'SPACE', 'ERECT', 'DISMANTLE',
     ];
 
     // Look for lines that contain a known keyword and look like a course title
@@ -479,12 +509,15 @@ function parseOCRText(rawText, documentType) {
 
         // Skip very short lines, date lines, name/ID lines, venue lines
         if (line.length < 5) continue;
-        if (upperLine.match(/^(NAME|ID\s*NO|FIN|COURSE\s*DATE|COURSE\s*VENUE|VALIDITY|S\/N|DATE|DOB|SERIAL\s*NUM|ISSUED?\s*DATE)/)) continue;
+        if (upperLine.match(/^(NAME|ID\s*(NO|NUMBER)|FIN|COURSE\s*(DATE|VENUE)|VALIDITY|S\/N|DATE|DOB)/)) continue;
+        if (upperLine.match(/^(SERIAL\s*NUM|STUDENT\s*NUM|ISSUED?\s*DATE)/)) continue;
         if (upperLine.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/)) continue;
         if (upperLine.match(/^[FGM]\d{7}[A-Z]$/)) continue;
         if (upperLine.match(/SINGAPORE|PIONEER|STREET|AVENUE|ROAD|BLOCK/)) continue;
-        if (upperLine.match(/^MR\.|^MS\.|DIRECTOR|PRINCIPAL|TRAINER|DIVISION/)) continue;
-        if (upperLine.match(/^MANAGING/)) continue;
+        if (upperLine.match(/^MR\.|^MS\.|DIRECTOR|PRINCIPAL|TRAINER(?:\s|$)|DIVISION/)) continue;
+        if (upperLine.match(/^MANAGING|^WORKFORCE|^QUALIF|^STEPS\s*TO/)) continue;
+        // Skip lines that are just a person's name (all-uppercase, 2-3 words, no keywords)
+        if (upperLine.match(/^[A-Z]+\s+[A-Z]+(?:\s+[A-Z]+)?$/) && !courseKeywords.some(k => upperLine.includes(k))) continue;
 
         // Check if this line contains a course keyword
         const hasKeyword = courseKeywords.some(k => upperLine.includes(k));
@@ -520,7 +553,6 @@ function parseOCRText(rawText, documentType) {
     // ═══════════════════════════════════════════════════════════
     const providerPatterns = [
         /(?:PROVIDER|ISSUED\s*BY|ISSUING\s*(?:BODY|ORG))\s*[:\-]?\s*([A-Z0-9\s&.,]+?)(?:\n|$)/,
-        /(?:TRAINING\s*(?:CENTRE|CENTER|PROVIDER))\s*[:\-]?\s*([A-Z0-9\s&.,]+?)(?:\n|$)/,
     ];
     for (const pattern of providerPatterns) {
         const match = text.match(pattern);
@@ -530,29 +562,57 @@ function parseOCRText(rawText, documentType) {
         }
     }
 
-    // Provider fallback: look for known provider names or multi-word
-    // company-like names near the top (before the course title)
+    // Provider pattern: "Training Manager Of Wong Fong Academy"
+    if (!result.course_provider) {
+        const mgrMatch = text.match(/TRAINING\s*MANAGER\s*(?:OF|AT|FOR)\s+(.+?)(?:\n|$)/);
+        if (mgrMatch) {
+            result.course_provider = mgrMatch[1].trim();
+        }
+    }
+
+    // Provider pattern: line containing "ACADEMY", "INSTITUTE", "CENTRE", "CENTER" etc.
     if (!result.course_provider && isCertification) {
-        // Look for company-like text before the course title line
+        const providerIndicators = ['ACADEMY', 'INSTITUTE', 'CENTRE', 'CENTER', 'COLLEGE', 'SCHOOL'];
+        for (let i = 0; i < Math.min(upperLines.length, 8); i++) {
+            const ul = upperLines[i];
+            // Skip lines that are also the course title
+            if (result.course_title && ul.includes(result.course_title.toUpperCase().substring(0, 10))) continue;
+            // Skip lines with labels
+            if (ul.match(/^(NAME|ID|FIN|SERIAL|STUDENT|COURSE\s*(DATE|VENUE|TITLE)|ISSUED|VALIDITY|S\/N)/)) continue;
+            if (ul.match(/^(MR\.|MS\.|DIRECTOR|PRINCIPAL|MANAGING|STEPS\s*TO)/)) continue;
+            // Check for known provider indicators
+            if (providerIndicators.some(ind => ul.includes(ind))) {
+                // Use original case from lines[]
+                let prov = lines[i].trim();
+                // Strip common suffixes like "®" or tagline words
+                prov = prov.replace(/[®©™]/g, '').replace(/\s+/g, ' ').trim();
+                result.course_provider = prov;
+                break;
+            }
+        }
+    }
+
+    // Provider fallback: look for company-like names near the top
+    // (before the course title line) — for certs like Avanta Global
+    if (!result.course_provider && isCertification) {
         const courseTitleIdx = result.course_title
             ? upperLines.findIndex(l => l.includes(result.course_title?.toUpperCase()?.substring(0, 10) || '____'))
             : upperLines.length;
 
-        // Scan lines before course title for provider-like names
         const providerCandidates = [];
         for (let i = 0; i < Math.min(courseTitleIdx, 6); i++) {
             const line = lines[i]?.trim();
             if (!line || line.length < 3) continue;
             // Skip known non-provider lines
-            if (upperLines[i].match(/^(S\/N|WAHRC|CERTIFICATE|COURSE|NAME|ID|FIN|DATE|VALID|SERIAL|MANAGING|DIRECTOR|TRAINER)/)) continue;
-            if (upperLines[i].match(/^\d/)) continue; // starts with number
-            if (upperLines[i].match(/SERIAL\s*NUMBER/)) continue; // Serial Number line
-            // Potential provider: short text, looks like a name
+            if (upperLines[i].match(/^(S\/N|WAHRC|CERTIFICATE|COURSE|NAME|ID|FIN|DATE|VALID|SERIAL|STUDENT)/)) continue;
+            if (upperLines[i].match(/^(MANAGING|DIRECTOR|TRAINER|STEPS\s*TO|WORKFORCE|QUALIF)/)) continue;
+            if (upperLines[i].match(/^\d/)) continue;
+            if (upperLines[i].match(/SERIAL\s*NUMBER|STUDENT\s*NUMBER/)) continue;
+            // Potential provider: short text, starts with letter
             if (line.length >= 3 && line.length <= 30 && line.match(/^[A-Za-z]/)) {
                 providerCandidates.push(line);
             }
         }
-        // Join consecutive short lines that might be a split name
         if (providerCandidates.length > 0) {
             result.course_provider = providerCandidates.join(' ').trim();
         }
