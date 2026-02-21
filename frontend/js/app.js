@@ -39,6 +39,9 @@ const App = (() => {
     // Add Worker button
     document.getElementById('btn-add-worker')?.addEventListener('click', showAddWorkerModal);
 
+    // Export Workers button
+    document.getElementById('btn-export-workers')?.addEventListener('click', exportSelectedWorkers);
+
     // Add Certification button
     document.getElementById('btn-add-cert')?.addEventListener('click', () => showAddCertModal());
     document.getElementById('btn-add-cert-profile')?.addEventListener('click', () => {
@@ -124,10 +127,11 @@ const App = (() => {
       const workers = result.data || [];
 
       if (workers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No workers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No workers found</td></tr>';
       } else {
         tbody.innerHTML = workers.map(w => `
                         <tr>
+                            <td><input type="checkbox" class="worker-checkbox" value="${w.id}"></td>
                             <td><strong style="color:var(--accent-primary);cursor:pointer" onclick="Router.navigate('worker-profile','${w.id}')">${esc(w.fin_number)}</strong></td>
                             <td>${esc(w.work_permit_no || '—')}</td>
                             <td>${esc(w.worker_name)}</td>
@@ -151,8 +155,64 @@ const App = (() => {
       }
 
       renderPagination('workers-pagination', result.pagination, (p) => { workersPage = p; loadWorkers(); });
+
+      // Setup export checkboxes
+      const selectAll = document.getElementById('selectAllWorkers');
+      if (selectAll) {
+        selectAll.checked = false;
+        selectAll.onchange = (e) => {
+          document.querySelectorAll('.worker-checkbox').forEach(cb => cb.checked = e.target.checked);
+          updateExportButtonState();
+        };
+      }
+      document.querySelectorAll('.worker-checkbox').forEach(cb => {
+        cb.onchange = updateExportButtonState;
+      });
+      updateExportButtonState();
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-state">Error: ${esc(err.message)}</td></tr>`;
+    }
+  }
+
+  function updateExportButtonState() {
+    const checked = document.querySelectorAll('.worker-checkbox:checked');
+    const exportBtn = document.getElementById('btn-export-workers');
+    if (exportBtn) {
+      exportBtn.disabled = checked.length === 0;
+    }
+
+    const selectAll = document.getElementById('selectAllWorkers');
+    const all = document.querySelectorAll('.worker-checkbox');
+    if (selectAll && all.length > 0) {
+      selectAll.checked = checked.length === all.length;
+    }
+  }
+
+  async function exportSelectedWorkers() {
+    const checked = document.querySelectorAll('.worker-checkbox:checked');
+    const workerIds = Array.from(checked).map(cb => parseInt(cb.value, 10));
+
+    if (workerIds.length === 0) return;
+
+    const exportBtn = document.getElementById('btn-export-workers');
+    const originalText = exportBtn.innerHTML;
+    exportBtn.innerHTML = 'Exporting...';
+    exportBtn.disabled = true;
+
+    try {
+      const res = await API.exportWorkers(workerIds);
+      showToast(res.message || 'Exported to Google Sheets successfully!', 'success');
+      // Deselect all
+      document.querySelectorAll('.worker-checkbox').forEach(cb => cb.checked = false);
+      updateExportButtonState();
+    } catch (err) {
+      showToast(err.message || 'Export failed', 'error');
+    } finally {
+      if (exportBtn) {
+        exportBtn.innerHTML = originalText;
+        exportBtn.disabled = false;
+        updateExportButtonState();
+      }
     }
   }
 

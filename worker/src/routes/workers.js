@@ -9,7 +9,7 @@
  */
 
 import { jsonResponse, errorResponse, createdResponse } from '../utils/response.js';
-import { syncWorkerToSheet } from '../google-sync.js';
+import { syncWorkerToSheet, exportMultipleWorkersToSheet } from '../google-sync.js';
 
 export async function handleWorkers(request, env, path) {
     const method = request.method;
@@ -22,6 +22,11 @@ export async function handleWorkers(request, env, path) {
     // POST /api/workers/upload-document
     if (path === '/api/workers/upload-document' && method === 'POST') {
         return uploadWorkerDocument(request, env);
+    }
+
+    // POST /api/workers/export
+    if (path === '/api/workers/export' && method === 'POST') {
+        return exportWorkers(request, env);
     }
 
     // GET /api/workers/list
@@ -287,5 +292,44 @@ async function deleteWorker(env, id) {
     await env.DB.prepare('DELETE FROM certifications WHERE worker_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM workers WHERE id = ?').bind(id).run();
 
-    return jsonResponse({ success: true, message: 'Worker deleted' });
+    return jsonResponse({ success: true, message: 'Worker deleted successfully' });
+}
+
+/**
+ * Export selected workers to Google Sheets.
+ */
+async function exportWorkers(request, env) {
+    let body;
+    try {
+        body = await request.json();
+    } catch (e) {
+        return errorResponse('Invalid JSON payload', 400);
+    }
+
+    const { workerIds } = body;
+
+    if (!workerIds || !Array.isArray(workerIds) || workerIds.length === 0) {
+        return errorResponse('No workers selected for export', 400);
+    }
+
+    try {
+        // D1 query IN clause with bind parameters isn't native, must construct "?" list
+        const placeholders = workerIds.map(() => '?').join(',');
+        const query = `SELECT * FROM workers WHERE id IN (${placeholders})`;
+        const { results } = await env.DB.prepare(query).bind(...workerIds).all();
+
+        if (!results || results.length === 0) {
+            return errorResponse('Selected workers not found', 404);
+        }
+
+        await exportMultipleWorkersToSheet(env, results);
+
+        return jsonResponse({
+            success: true,
+            message: `Successfully exported ${results.length} worker(s) to Google Sheets!`
+        });
+    } catch (err) {
+        console.error('Batch export failed:', err);
+        return errorResponse('Failed to export workers: ' + err.message, 500);
+    }
 }

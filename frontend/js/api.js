@@ -61,6 +61,13 @@ const API = (() => {
             return request(`/api/workers/${id}`);
         },
 
+        exportWorkers(workerIds) {
+            return request('/api/workers/export', {
+                method: 'POST',
+                body: JSON.stringify({ workerIds }),
+            });
+        },
+
         createWorker(data) {
             return request('/api/workers/create', {
                 method: 'POST',

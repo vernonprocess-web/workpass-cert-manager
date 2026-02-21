@@ -112,6 +112,59 @@ export async function syncCertificationToSheet(env, worker, cert) {
     }
 }
 
+/**
+ * Export selected workers to Google Sheets.
+ */
+export async function exportMultipleWorkersToSheet(env, workers) {
+    const apiKey = env.GOOGLE_SHEETS_API_KEY;
+    const sheetId = env.GOOGLE_SHEET_ID;
+
+    if (!apiKey || !sheetId) {
+        throw new Error('Google Sheets API key or Sheet ID not configured');
+    }
+
+    const sheetName = 'Export Data';
+
+    try {
+        await ensureSheetExists(apiKey, sheetId, sheetName);
+
+        const existingData = await readSheet(apiKey, sheetId, `${sheetName}!A:J`);
+        const rows = existingData.values || [];
+
+        const valuesToAppend = [];
+
+        // Ensure header exists
+        if (rows.length === 0) {
+            valuesToAppend.push([
+                'FIN / NRIC', 'Worker Name', 'WP No', 'Date of Birth',
+                'Nationality', 'Sex', 'Employer', 'WP Expiry', 'Recorded Date', 'Export Date'
+            ]);
+        }
+
+        const exportTime = new Date().toISOString();
+        for (const worker of workers) {
+            valuesToAppend.push([
+                worker.fin_number || '',
+                worker.worker_name || '',
+                worker.work_permit_no || '',
+                worker.date_of_birth || '',
+                worker.nationality || '',
+                worker.sex || '',
+                worker.employer_name || '',
+                worker.wp_expiry_date || '',
+                worker.created_at || '',
+                exportTime
+            ]);
+        }
+
+        if (valuesToAppend.length > 0) {
+            await appendSheet(apiKey, sheetId, `${sheetName}!A:J`, valuesToAppend);
+        }
+    } catch (err) {
+        throw new Error(`Google Sheets export error: ${err.message}`);
+    }
+}
+
 // ─── Google Sheets API Helpers ────────────────────────────
 
 async function readSheet(apiKey, sheetId, range) {
@@ -150,4 +203,23 @@ async function appendSheet(apiKey, sheetId, range, values) {
         throw new Error(`Sheets append failed: ${err}`);
     }
     return res.json();
+}
+
+async function ensureSheetExists(apiKey, sheetId, title) {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    const sheetExists = data.sheets?.some(s => s.properties?.title === title);
+
+    if (!sheetExists) {
+        const createUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate?key=${apiKey}`;
+        await fetch(createUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                requests: [{ addSheet: { properties: { title } } }]
+            })
+        });
+    }
 }
