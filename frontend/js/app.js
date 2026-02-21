@@ -42,6 +42,9 @@ const App = (() => {
     // Export Workers button
     document.getElementById('btn-export-workers')?.addEventListener('click', exportSelectedWorkers);
 
+    // Export individual worker profile to Excel
+    document.getElementById('btn-export-profile')?.addEventListener('click', exportWorkerProfile);
+
     // Add Certification button
     document.getElementById('btn-add-cert')?.addEventListener('click', () => showAddCertModal());
     document.getElementById('btn-add-cert-profile')?.addEventListener('click', () => {
@@ -319,17 +322,104 @@ const App = (() => {
           docsEl.innerHTML = '<p class="empty-state">No documents uploaded</p>';
         } else {
           docsEl.innerHTML = docs.map(d => `
-                        <a href="${API.getFileUrl(d.r2_key)}" target="_blank" class="doc-card" title="${esc(d.original_name || d.r2_key)}">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            <div class="doc-card-name">${esc(d.original_name || d.document_type)}</div>
-                            <div style="font-size:10px;margin-top:4px">${esc(d.document_type)}</div>
-                        </a>
-                    `).join('');
+            <div class="document-item">
+                <a href="${esc(d.url)}" target="_blank" class="document-link">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                    <span>${esc(d.document_type || 'Document')}</span>
+                </a>
+                <span class="document-date">${formatDate(d.created_at)}</span>
+            </div>
+          `).join('');
         }
       }
     } catch (err) {
-      detailsEl.innerHTML = `<p class="empty-state">Error: ${esc(err.message)}</p>`;
+      detailsEl.innerHTML = `<span class="empty-state">Error: ${esc(err.message)}</span>`;
+      if (titleEl) titleEl.textContent = 'Worker Not Found';
     }
+  }
+
+  function exportWorkerProfile() {
+    if (!currentWorkerProfile) return;
+
+    // Create new workbook
+    const wb = XLSX.utils.book_new();
+
+    // ==========================================
+    // Sheet 1: Worker Details
+    // ==========================================
+    const w = currentWorkerProfile;
+    const detailsData = [
+      ["WORKER DETAILS"],
+      [],
+      ["FIN / NRIC Number", w.fin_number || ''],
+      ["Work Permit No", w.work_permit_no || ''],
+      ["Worker Name", w.worker_name || ''],
+      ["Date of Birth", w.date_of_birth || ''],
+      ["Nationality", w.nationality || ''],
+      ["Sex", w.sex || ''],
+      ["Race", w.race || ''],
+      ["Country/Place of Birth", w.country_of_birth || ''],
+      ["Address", w.address || ''],
+      ["Employer", w.employer_name || ''],
+      ["WP Expiry Date", w.wp_expiry_date || ''],
+      ["Created", w.created_at ? formatDate(w.created_at) : '']
+    ];
+
+    const wsDetails = XLSX.utils.aoa_to_sheet(detailsData);
+    // Auto-size columns to be wider
+    wsDetails['!cols'] = [{ wch: 25 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, wsDetails, "Sheet 1");
+
+    // ==========================================
+    // Sheet 2+: Certifications (chunks of 6)
+    // ==========================================
+    const certs = w.certifications || [];
+
+    if (certs.length === 0) {
+      // Create empty sheet 2 if no certs
+      const wsEmptyCerts = XLSX.utils.aoa_to_sheet([["No certifications found."]]);
+      XLSX.utils.book_append_sheet(wb, wsEmptyCerts, "Sheet 2");
+    } else {
+      // Chunk certifications (max 6 per sheet)
+      for (let i = 0; i < certs.length; i += 6) {
+        const chunk = certs.slice(i, i + 6);
+        const chunkData = [
+          ["CERTIFICATIONS"],
+          [],
+          ["COURSE", "PROVIDER", "S/N", "DURATION", "ISSUE", "EXPIRY"]
+        ];
+
+        chunk.forEach(c => {
+          chunkData.push([
+            c.course_title || '',
+            c.course_provider || '',
+            c.cert_serial_no || '',
+            c.course_duration || '',
+            c.issue_date || '',
+            c.expiry_date || ''
+          ]);
+        });
+
+        const wsCerts = XLSX.utils.aoa_to_sheet(chunkData);
+        // Auto-size certification columns
+        wsCerts['!cols'] = [
+          { wch: 45 }, // Course
+          { wch: 30 }, // Provider
+          { wch: 20 }, // S/N
+          { wch: 15 }, // Duration
+          { wch: 15 }, // Issue
+          { wch: 15 }  // Expiry
+        ];
+
+        // Sheet index starts at 2
+        const sheetIndex = (i / 6) + 2;
+        XLSX.utils.book_append_sheet(wb, wsCerts, `Sheet ${sheetIndex}`);
+      }
+    }
+
+    // Trigger Download
+    const fileName = `${w.worker_name.replace(/[^a-z0-9]/gi, '_')}_${w.fin_number}_Profile.xlsx`;
+    XLSX.writeFile(wb, fileName);
   }
 
   // ═══════════════════════════════════════════════════════
