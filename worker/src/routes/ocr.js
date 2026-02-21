@@ -150,6 +150,9 @@ function parseOCRText(rawText, documentType) {
     const isCertification = documentType === 'certification' ||
         text.includes('COURSE DATE') ||
         text.includes('COURSE VENUE') ||
+        text.includes('COURSE TITLE') ||
+        text.includes('ISSUED DATE') ||
+        text.includes('SERIAL NUMBER') ||
         text.includes('CERTIFICATE') ||
         text.includes('CERTIFICATION') ||
         text.includes('TRAINING') ||
@@ -241,7 +244,7 @@ function parseOCRText(rawText, documentType) {
                 // Skip FIN-like numbers, empty lines, and labels
                 if (nextLine.match(/^[A-Z]\d{7}[A-Z]$/)) continue; // FIN number
                 if (nextLine.match(/^\d+$/)) continue; // just numbers
-                if (nextLine.match(/^(WORK\s*PERMIT|SECTOR|DOB|DATE|SEX|EMPLOYER|NATIONALITY)/)) break;
+                if (nextLine.match(/^(WORK\s*PERMIT|SECTOR|DOB|DATE|SEX|EMPLOYER|NATIONALITY|ID\s*NO|FIN|SERIAL|ISSUED)/)) break;
 
                 // This line should be the name — all uppercase letters, spaces, dots, hyphens
                 if (nextLine.match(/^[A-Z][A-Z\s.'\-\/]{2,}$/) && !nextLine.match(/PTE|LTD|SDN|BHD|CORP|INC|COMPANY/)) {
@@ -256,9 +259,9 @@ function parseOCRText(rawText, documentType) {
         }
     }
 
-    // Fallback: look for "NAME" with inline value
+    // Fallback: look for "NAME" with inline value (with or without colon)
     if (!result.worker_name) {
-        const nameInline = text.match(/NAME\s*[:\-]\s*([A-Z][A-Z\s.'\-]{2,})/);
+        const nameInline = text.match(/NAME\s*[:\-]?\s+([A-Z][A-Z\s.'\-]{2,})/);
         if (nameInline) {
             const candidate = cleanName(nameInline[1]);
             if (isValidName(candidate)) {
@@ -370,9 +373,9 @@ function parseOCRText(rawText, documentType) {
         result.date_of_birth = formatDate(dobMatch[1]);
     }
 
-    // Explicit Issue Date
+    // Explicit Issue Date — also match "Issued Date:" pattern
     if (!result.issue_date) {
-        const issueMatch = text.match(/(?:ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+        const issueMatch = text.match(/(?:ISSUED?\s*DATE|ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
         if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
     }
 
@@ -423,12 +426,24 @@ function parseOCRText(rawText, documentType) {
     // ═══════════════════════════════════════════════════════════
     // 9. CERT SERIAL NUMBER (S/N)
     //    e.g. "S/N WAHRC-2025-B134P-659" or "S/N: ABC-123"
+    //    OR  "Serial Number: 0226-02901"
     // ═══════════════════════════════════════════════════════════
-    const snMatch = text.match(/S\/N\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-]+)/);
-    if (snMatch) {
-        result.cert_serial_no = snMatch[1].trim();
+
+    // Pattern 1: "Serial Number: 0226-02901"
+    const serialNumMatch = text.match(/SERIAL\s*(?:NUMBER|NO\.?)\s*[:\-]?\s*([\dA-Z][\dA-Z\-]+)/i);
+    if (serialNumMatch) {
+        result.cert_serial_no = serialNumMatch[1].trim();
     }
-    // Also check next line after "S/N" label
+
+    // Pattern 2: "S/N WAHRC-2025-B134P-659"
+    if (!result.cert_serial_no) {
+        const snMatch = text.match(/S\/N\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-]+)/);
+        if (snMatch) {
+            result.cert_serial_no = snMatch[1].trim();
+        }
+    }
+
+    // Pattern 3: "S/N" on its own line, number on next line
     if (!result.cert_serial_no) {
         for (let i = 0; i < upperLines.length; i++) {
             if (upperLines[i].match(/^S\/N\s*$/)) {
@@ -464,24 +479,29 @@ function parseOCRText(rawText, documentType) {
 
         // Skip very short lines, date lines, name/ID lines, venue lines
         if (line.length < 5) continue;
-        if (upperLine.match(/^(NAME|ID\s*NO|FIN|COURSE\s*DATE|COURSE\s*VENUE|VALIDITY|S\/N|DATE|DOB)/)) continue;
+        if (upperLine.match(/^(NAME|ID\s*NO|FIN|COURSE\s*DATE|COURSE\s*VENUE|VALIDITY|S\/N|DATE|DOB|SERIAL\s*NUM|ISSUED?\s*DATE)/)) continue;
         if (upperLine.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/)) continue;
         if (upperLine.match(/^[FGM]\d{7}[A-Z]$/)) continue;
         if (upperLine.match(/SINGAPORE|PIONEER|STREET|AVENUE|ROAD|BLOCK/)) continue;
         if (upperLine.match(/^MR\.|^MS\.|DIRECTOR|PRINCIPAL|TRAINER|DIVISION/)) continue;
+        if (upperLine.match(/^MANAGING/)) continue;
 
         // Check if this line contains a course keyword
         const hasKeyword = courseKeywords.some(k => upperLine.includes(k));
         if (hasKeyword && line.length >= 10) {
-            result.course_title = line.replace(/\s+/g, ' ').trim();
+            // Strip "Course Title:" prefix if present
+            let title = line.replace(/\s+/g, ' ').trim();
+            title = title.replace(/^Course\s*Title\s*[:\-]?\s*/i, '').trim();
+            result.course_title = title;
             break;
         }
     }
 
-    // Strategy 2: Regex fallback
+    // Strategy 2: Regex fallback — strip "Course Title:" prefix
     if (!result.course_title) {
         const titlePatterns = [
-            /COURSE\s*(?:TITLE)?\s*[:\-]\s*([^\n]{5,})/,
+            /COURSE\s*TITLE\s*[:\-]\s*([^\n]{5,})/,
+            /COURSE\s*[:\-]\s*([^\n]{5,})/,
             /CERTIFICATE\s*(?:IN|OF|FOR)\s*[:\-]?\s*([^\n]{5,})/,
         ];
         for (const pattern of titlePatterns) {
@@ -524,8 +544,9 @@ function parseOCRText(rawText, documentType) {
             const line = lines[i]?.trim();
             if (!line || line.length < 3) continue;
             // Skip known non-provider lines
-            if (upperLines[i].match(/^(S\/N|WAHRC|CERTIFICATE|COURSE|NAME|ID|FIN|DATE|VALID)/)) continue;
+            if (upperLines[i].match(/^(S\/N|WAHRC|CERTIFICATE|COURSE|NAME|ID|FIN|DATE|VALID|SERIAL|MANAGING|DIRECTOR|TRAINER)/)) continue;
             if (upperLines[i].match(/^\d/)) continue; // starts with number
+            if (upperLines[i].match(/SERIAL\s*NUMBER/)) continue; // Serial Number line
             // Potential provider: short text, looks like a name
             if (line.length >= 3 && line.length <= 30 && line.match(/^[A-Za-z]/)) {
                 providerCandidates.push(line);
