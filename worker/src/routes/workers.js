@@ -9,7 +9,7 @@
  */
 
 import { jsonResponse, errorResponse, createdResponse } from '../utils/response.js';
-import { syncWorkerToSheet, exportMultipleWorkersToSheet } from '../google-sync.js';
+import { syncWorkerToSheet } from '../google-sync.js';
 
 export async function handleWorkers(request, env, path) {
     const method = request.method;
@@ -296,7 +296,7 @@ async function deleteWorker(env, id) {
 }
 
 /**
- * Export selected workers to Google Sheets.
+ * Fetch selected workers raw records to be exported to CSV by the frontend.
  */
 async function exportWorkers(request, env) {
     let body;
@@ -322,11 +322,11 @@ async function exportWorkers(request, env) {
             return errorResponse('Selected workers not found', 404);
         }
 
-        await exportMultipleWorkersToSheet(env, results);
-
+        // Instead of exporting to sheets, we just return the raw records so the frontend can download a CSV
         return jsonResponse({
             success: true,
-            message: `Successfully exported ${results.length} worker(s) to Google Sheets!`
+            data: results,
+            message: `Successfully generated export payload for ${results.length} worker(s)!`
         });
     } catch (err) {
         console.error('Batch export failed:', err);

@@ -201,7 +201,51 @@ const App = (() => {
 
     try {
       const res = await API.exportWorkers(workerIds);
-      showToast(res.message || 'Exported to Google Sheets successfully!', 'success');
+      const workers = res.data || [];
+
+      if (workers.length > 0) {
+        // Build CSV
+        const headers = ['FIN / NRIC', 'Worker Name', 'WP No', 'Date of Birth', 'Nationality', 'Sex', 'Employer', 'WP Expiry', 'Recorded Date'];
+        let csvContent = headers.join(',') + '\n';
+
+        workers.forEach(worker => {
+          const row = [
+            worker.fin_number || '',
+            worker.worker_name || '',
+            worker.work_permit_no || '',
+            worker.date_of_birth || '',
+            worker.nationality || '',
+            worker.sex || '',
+            worker.employer_name || '',
+            worker.wp_expiry_date || '',
+            worker.created_at || ''
+          ];
+
+          // Escape quotes and wrap every field in quotes
+          const csvRow = row.map(field => {
+            const stringField = String(field);
+            return `"${stringField.replace(/"/g, '""')}"`;
+          }).join(',');
+
+          csvContent += csvRow + '\n';
+        });
+
+        // Trigger download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `worker_export_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showToast('Export successful! Download starting...', 'success');
+      } else {
+        showToast('No valid workers found to export.', 'warning');
+      }
+
       // Deselect all
       document.querySelectorAll('.worker-checkbox').forEach(cb => cb.checked = false);
       updateExportButtonState();
