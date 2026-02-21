@@ -138,6 +138,7 @@ function parseOCRText(rawText, documentType) {
         course_title: null,
         course_provider: null,
         cert_serial_no: null,
+        course_duration: null,
         issue_date: null,
         expiry_date: null,
     };
@@ -168,14 +169,25 @@ function parseOCRText(rawText, documentType) {
     //    M = issued from 2022 onwards
     // ═══════════════════════════════════════════════════════════
     // First try labeled "FIN", "ID NO", or "ID Number" pattern
-    const finLabelMatch = text.match(/(?:FIN|ID\s*(?:NO|NUMBER)\.?)\s*[:\-]?\s*([FGM]\d{7}[A-Z])/);
-    if (finLabelMatch) {
-        result.fin_number = finLabelMatch[1];
+    // Also handle NRIC format: S/T + 7 digits + letter (for Singaporeans/PRs)
+    const idLabelMatch = text.match(/(?:FIN|ID\s*(?:NO|NUMBER)\.?)\s*[:\-]?\s*([FGMST]\d{7}[A-Z])/);
+    if (idLabelMatch) {
+        result.fin_number = idLabelMatch[1];
     } else {
-        // Scan for any FIN-format string in the text
-        const finMatch = text.match(/\b([FGM]\d{7}[A-Z])\b/);
-        if (finMatch) {
-            result.fin_number = finMatch[1];
+        // Check for name with ID in parentheses: "VERNON TAN (S7616077E)"
+        const nameIdMatch = text.match(/([A-Z][A-Z\s.'\-]{4,})\s*\(([FGMST]\d{7}[A-Z])\)/);
+        if (nameIdMatch) {
+            result.fin_number = nameIdMatch[2];
+            if (!result.worker_name) {
+                const candidate = cleanName(nameIdMatch[1]);
+                if (isValidName(candidate)) result.worker_name = candidate;
+            }
+        } else {
+            // Scan for any FIN/NRIC-format string in the text
+            const finMatch = text.match(/\b([FGMST]\d{7}[A-Z])\b/);
+            if (finMatch) {
+                result.fin_number = finMatch[1];
+            }
         }
     }
 
@@ -277,20 +289,61 @@ function parseOCRText(rawText, documentType) {
     if (!result.worker_name && isCertification && result.fin_number) {
         const finIdx = upperLines.findIndex(l => l.includes(result.fin_number));
         if (finIdx > 0) {
-            // Scan backwards from FIN for a name-like line
             for (let i = finIdx - 1; i >= 0 && i >= finIdx - 3; i--) {
                 const line = upperLines[i].trim();
-                // Must be mostly uppercase letters, spaces, and common name chars
-                if (line.match(/^[A-Z][A-Z\s.'\-\/]{4,}$/) &&
-                    !line.match(/ACADEMY|PTE|LTD|COURSE|CERTIFICATE|TRAINING|PERFORM|HEIGHT|SAFETY|WORK|SINGAPORE|QUALIFICATION/) &&
-                    !line.match(/SERIAL|STUDENT|NUMBER|ISSUED|VALID|VENUE|GLOBAL/) &&
-                    !line.match(/^[FGM]\d{7}[A-Z]$/)) {
-                    const candidate = cleanName(line);
+                // Strip ID in parentheses if present
+                const cleaned = line.replace(/\s*\([FGMST]\d{7}[A-Z]\)/, '').trim();
+                if (cleaned.match(/^[A-Z][A-Z\s.'\-\/]{4,}$/) &&
+                    !cleaned.match(/ACADEMY|PTE|LTD|COURSE|CERTIFICATE|TRAINING|PERFORM|HEIGHT|SAFETY|WORK|SINGAPORE|QUALIFICATION/) &&
+                    !cleaned.match(/SERIAL|STUDENT|NUMBER|ISSUED|VALID|VENUE|GLOBAL|ACHIEVEMENT|COMPLETION|CERTIFY|ATTENDED|COMPLETED/) &&
+                    !cleaned.match(/^[FGMST]\d{7}[A-Z]$/)) {
+                    const candidate = cleanName(cleaned);
                     if (isValidName(candidate) && candidate.split(/\s+/).length >= 2) {
                         result.worker_name = candidate;
                         break;
                     }
                 }
+            }
+        }
+    }
+
+    // Fallback: "This is to certify that" → name on following line(s)
+    if (!result.worker_name) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/THIS\s*IS\s*TO\s*CERTIFY/)) {
+                // Name is typically 1-3 lines after
+                for (let j = i + 1; j < Math.min(i + 4, upperLines.length); j++) {
+                    let nameLine = upperLines[j].trim();
+                    // Skip filler text
+                    if (nameLine.match(/^(HAS\s|THAT\s|THE\s|WHO\s)/)) continue;
+                    if (nameLine.length < 4) continue;
+                    // Strip ID in parentheses
+                    nameLine = nameLine.replace(/\s*\([FGMST]\d{7}[A-Z]\)/, '').trim();
+                    if (nameLine.match(/^[A-Z][A-Z\s.'\-]{3,}$/) && !nameLine.match(/ACADEMY|COURSE|CERTIFICATE|TRAINING|COMPLETION|ACHIEVEMENT/)) {
+                        const candidate = cleanName(nameLine);
+                        if (isValidName(candidate) && candidate.split(/\s+/).length >= 2) {
+                            result.worker_name = candidate;
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // Fallback: label-below-value (Autodesk format): line before "NAME" label
+    if (!result.worker_name) {
+        for (let i = 1; i < upperLines.length; i++) {
+            if (upperLines[i].match(/^NAME\s*$/)) {
+                const prev = upperLines[i - 1].trim();
+                if (prev.match(/^[A-Z][A-Z\s.'\-]{3,}$/) && !prev.match(/CERTIFICATE|COMPLETION|ACHIEVEMENT|COURSE/)) {
+                    const candidate = cleanName(prev);
+                    if (isValidName(candidate)) {
+                        result.worker_name = candidate;
+                    }
+                }
+                break;
             }
         }
     }
@@ -392,6 +445,20 @@ function parseOCRText(rawText, documentType) {
         result.issue_date = formatDate(courseDateMatch[1]);
     }
 
+    // Text-month course date: "13-FEBRUARY-2022" or labeled "COURSE DATE" above
+    if (!result.issue_date) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/^COURSE\s*DATE\s*$/)) {
+                // Value on PREVIOUS line (label-below-value) or on SAME line after label
+                if (i > 0) {
+                    const prev = upperLines[i - 1].trim();
+                    const textDate = parseTextMonthDate(prev);
+                    if (textDate) { result.issue_date = textDate; break; }
+                }
+            }
+        }
+    }
+
     // Explicit DOB (only for non-certification docs)
     const dobMatch = text.match(/(?:DATE\s*OF\s*BIRTH|DOB|D\.?O\.?B\.?|BORN)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
     if (dobMatch) {
@@ -402,6 +469,42 @@ function parseOCRText(rawText, documentType) {
     if (!result.issue_date) {
         const issueMatch = text.match(/(?:ISSUED?\s*DATE|ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
         if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
+    }
+
+    // Text-month issue dates: "Issued Date: 07 June 2025" or "14 December 2011"
+    if (!result.issue_date) {
+        const issueTmMatch = text.match(/(?:ISSUED?\s*DATE|ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\s\-](?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s*[,\-]?\s*\d{4})/i);
+        if (issueTmMatch) {
+            result.issue_date = parseTextMonthDate(issueTmMatch[1]);
+        }
+    }
+
+    // Date range: "16 NOV 2017 TO 21 DEC 2017" → issue_date = end date
+    if (!result.issue_date) {
+        const rangeMatch = text.match(/(\d{1,2}[\s\-](?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s*[,\-]?\s*\d{4})\s+TO\s+(\d{1,2}[\s\-](?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s*[,\-]?\s*\d{4})/i);
+        if (rangeMatch) {
+            result.issue_date = parseTextMonthDate(rangeMatch[2]); // use END date
+        }
+    }
+
+    // "conducted on ... December 2011" → try to extract a date
+    if (!result.issue_date) {
+        const conductedMatch = text.match(/CONDUCTED\s+ON\s+.+?(\d{1,2})(?:ST|ND|RD|TH)?\s+(?:AND\s+\d{1,2}(?:ST|ND|RD|TH)?\s+)?((?:JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s*[,\-]?\s*\d{4})/i);
+        if (conductedMatch) {
+            result.issue_date = parseTextMonthDate(conductedMatch[1] + ' ' + conductedMatch[2]);
+        }
+    }
+
+    // Standalone text-month date as last resort for issue_date on certs
+    if (!result.issue_date && isCertification) {
+        // Look for a standalone date line with text month
+        for (const ul of upperLines) {
+            const d = parseTextMonthDate(ul);
+            if (d) {
+                result.issue_date = d;
+                break;
+            }
+        }
     }
 
     // Expiry Date
@@ -455,12 +558,21 @@ function parseOCRText(rawText, documentType) {
     //    Patterns: "S/N WAHRC-2025-B134P-659"
     //              "Serial Number: 0226-02901"
     //              "Student Number: WPH-GMS-1110-1.1-1292"
+    //              "Certificate No. AP006309688720501O278"
     // ═══════════════════════════════════════════════════════════
 
-    // Pattern 1: "Serial Number:" or "Student Number:" (numbers/letters/hyphens/dots)
+    // Pattern 1: "Serial Number:", "Student Number:", or "Certificate No."
     const serialNumMatch = text.match(/(?:SERIAL|STUDENT)\s*(?:NUMBER|NO\.?)\s*[:\-]?\s*([\dA-Z][\dA-Z\-\.]+)/i);
     if (serialNumMatch) {
         result.cert_serial_no = serialNumMatch[1].trim();
+    }
+
+    // Certificate No. pattern
+    if (!result.cert_serial_no) {
+        const certNoMatch = text.match(/CERTIFICATE\s*(?:NO|NUMBER)\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\.]+)/i);
+        if (certNoMatch) {
+            result.cert_serial_no = certNoMatch[1].trim();
+        }
     }
 
     // Pattern 2: "S/N WAHRC-2025-B134P-659" (inline)
@@ -546,6 +658,72 @@ function parseOCRText(rawText, documentType) {
         }
     }
 
+    // Strategy 3: label-below-value (Autodesk) — value on line BEFORE "COURSE TITLE" label
+    if (!result.course_title) {
+        for (let i = 1; i < upperLines.length; i++) {
+            if (upperLines[i].match(/^COURSE\s*TITLE\s*$/)) {
+                const prev = lines[i - 1]?.trim();
+                if (prev && prev.length >= 5) {
+                    result.course_title = prev.replace(/\s+/g, ' ').trim();
+                }
+                break;
+            }
+        }
+    }
+
+    // Strategy 4: "has successfully completed a course in" / "has attended"
+    // → course title on the next non-filler line
+    if (!result.course_title) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/(?:COMPLETED|ATTENDED)\s*(?:A\s*)?(?:COURSE)?\s*(?:IN)?\s*$/) ||
+                upperLines[i].match(/HAS\s+(?:SUCCESSFULLY\s+)?COMPLETED/) ||
+                upperLines[i].match(/HAS\s+ATTENDED/)) {
+                // Course title on following lines
+                for (let j = i + 1; j < Math.min(i + 4, upperLines.length); j++) {
+                    const cl = lines[j]?.trim();
+                    if (!cl || cl.length < 4) continue;
+                    const ucl = upperLines[j];
+                    // Skip filler phrases
+                    if (ucl.match(/^(HAS\s|A\s*COURSE|THIS\s|THAT\s|THE\s|CONDUCTED|IN$)/)) continue;
+                    // Skip dates, names, IDs
+                    if (ucl.match(/^[FGMST]\d{7}[A-Z]$/)) continue;
+                    if (ucl.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/)) continue;
+                    if (ucl.match(/^(NAME|ID|ISSUED|SERIAL|VALID)/)) continue;
+                    // This should be the course title
+                    let title = cl.replace(/\s+/g, ' ').trim();
+                    // Remove parenthetical duration
+                    title = title.replace(/\s*\(\d+[\s\-]+\d*\s*HOURS?\)\s*/i, '').trim();
+                    if (title.length >= 5) {
+                        result.course_title = title;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 11a. COURSE DURATION
+    //      e.g. "(18 HOURS)", "41-100 HOURS", "COURSE DURATION" label
+    // ═══════════════════════════════════════════════════════════
+    const durationMatch = text.match(/(?:\(\s*)?(\d+[\s\-]+\d*\s*HOURS?)(?:\s*\))?/i);
+    if (durationMatch) {
+        result.course_duration = durationMatch[0].replace(/[()]/g, '').trim();
+    }
+    // Label-below-value: line before "COURSE DURATION" label
+    if (!result.course_duration) {
+        for (let i = 1; i < upperLines.length; i++) {
+            if (upperLines[i].match(/^COURSE\s*DURATION\s*$/)) {
+                const prev = lines[i - 1]?.trim();
+                if (prev && prev.match(/\d+/)) {
+                    result.course_duration = prev;
+                }
+                break;
+            }
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // 11. COURSE PROVIDER — improved extraction
     //     Look for provider names (often multi-line, near top of cert)
@@ -592,29 +770,61 @@ function parseOCRText(rawText, documentType) {
         }
     }
 
-    // Provider fallback: look for company-like names near the top
-    // (before the course title line) — for certs like Avanta Global
-    if (!result.course_provider && isCertification) {
-        const courseTitleIdx = result.course_title
-            ? upperLines.findIndex(l => l.includes(result.course_title?.toUpperCase()?.substring(0, 10) || '____'))
-            : upperLines.length;
+    // Provider: "Pte Ltd" / "Pte. Ltd." company pattern
+    if (!result.course_provider) {
+        const pteLtdMatch = text.match(/([A-Z][A-Z0-9\s&.,]+PTE\.?\s*LTD\.?)/);
+        if (pteLtdMatch) {
+            result.course_provider = pteLtdMatch[1].trim();
+        }
+    }
 
-        const providerCandidates = [];
-        for (let i = 0; i < Math.min(courseTitleIdx, 6); i++) {
-            const line = lines[i]?.trim();
-            if (!line || line.length < 3) continue;
-            // Skip known non-provider lines
-            if (upperLines[i].match(/^(S\/N|WAHRC|CERTIFICATE|COURSE|NAME|ID|FIN|DATE|VALID|SERIAL|STUDENT)/)) continue;
-            if (upperLines[i].match(/^(MANAGING|DIRECTOR|TRAINER|STEPS\s*TO|WORKFORCE|QUALIF)/)) continue;
-            if (upperLines[i].match(/^\d/)) continue;
-            if (upperLines[i].match(/SERIAL\s*NUMBER|STUDENT\s*NUMBER/)) continue;
-            // Potential provider: short text, starts with letter
-            if (line.length >= 3 && line.length <= 30 && line.match(/^[A-Za-z]/)) {
-                providerCandidates.push(line);
+    // Provider: "Accredited Training Provider" → name is on lines above
+    if (!result.course_provider) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/ACCREDITED\s*TRAINING\s*PROVIDER/)) {
+                // Provider name is typically on lines before this
+                for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+                    const line = lines[j]?.trim();
+                    if (!line || line.length < 3) continue;
+                    if (upperLines[j].match(/^(CERTIFICATE|THIS|CONGRATUL|APPROVED)/)) continue;
+                    if (line.match(/^[A-Za-z]/) && line.length >= 5) {
+                        result.course_provider = line.replace(/[®©™]/g, '').trim();
+                        break;
+                    }
+                }
+                break;
             }
         }
-        if (providerCandidates.length > 0) {
-            result.course_provider = providerCandidates.join(' ').trim();
+    }
+
+    // Provider: "AUTHORIZED TRAINING CENTER" label → line above has the institution
+    if (!result.course_provider) {
+        for (let i = 1; i < upperLines.length; i++) {
+            if (upperLines[i].match(/AUTHORIZED\s*TRAINING\s*CENTER/) ||
+                upperLines[i].match(/CONTINUING\s*EDUCATION/)) {
+                if (i > 0) {
+                    const prev = lines[i - 1]?.trim();
+                    if (prev && prev.length >= 5 && prev.match(/^[A-Za-z]/) &&
+                        !prev.match(/^(Director|Divisional|Managing|Mr|Ms)/i)) {
+                        result.course_provider = prev;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // Provider: "Institute of" / "Polytechnic" patterns
+    if (!result.course_provider) {
+        const instMatch = text.match(/(INSTITUTE\s+OF\s+[A-Z\s&]+?)(?:\n|$)/);
+        if (instMatch) {
+            result.course_provider = instMatch[1].trim();
+        }
+    }
+    if (!result.course_provider) {
+        const polyMatch = text.match(/([A-Z][A-Z\s]+POLYTECHNIC)/);
+        if (polyMatch) {
+            result.course_provider = polyMatch[1].trim();
         }
     }
 
@@ -651,6 +861,30 @@ function formatDate(dateStr) {
     const day = match[1].padStart(2, '0');
     const month = match[2].padStart(2, '0');
     const year = match[3];
+    return `${year}-${month}-${day}`;
+}
+
+/**
+ * Parse text-month dates like "16 NOV 2017", "14 December 2011", "13-FEBRUARY-2022".
+ * Returns ISO format YYYY-MM-DD or null.
+ */
+function parseTextMonthDate(str) {
+    if (!str) return null;
+    const months = {
+        JAN: '01', JANUARY: '01', FEB: '02', FEBRUARY: '02',
+        MAR: '03', MARCH: '03', APR: '04', APRIL: '04',
+        MAY: '05', JUN: '06', JUNE: '06', JUL: '07', JULY: '07',
+        AUG: '08', AUGUST: '08', SEP: '09', SEPTEMBER: '09',
+        OCT: '10', OCTOBER: '10', NOV: '11', NOVEMBER: '11',
+        DEC: '12', DECEMBER: '12',
+    };
+    const match = str.match(/(\d{1,2})[\s\-,]+([A-Z]+)[\s\-,]+(\d{4})/i);
+    if (!match) return null;
+    const day = match[1].padStart(2, '0');
+    const monthName = match[2].toUpperCase();
+    const month = months[monthName];
+    const year = match[3];
+    if (!month) return null;
     return `${year}-${month}-${day}`;
 }
 
