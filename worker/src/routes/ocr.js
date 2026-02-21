@@ -39,55 +39,108 @@ async function processOCR(request, env) {
         return errorResponse('No file provided', 400);
     }
 
-    // Validate image type
+    // Validate file type — images + PDF
     const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff'];
-    if (!imageTypes.includes(file.type)) {
-        return errorResponse('File must be an image (JPEG, PNG, WebP, GIF, BMP, TIFF)', 400);
+    const isPDF = file.type === 'application/pdf';
+    if (!imageTypes.includes(file.type) && !isPDF) {
+        return errorResponse('File must be an image (JPEG, PNG, WebP, GIF, BMP, TIFF) or PDF', 400);
     }
 
     // Convert file to base64
     const arrayBuffer = await file.arrayBuffer();
-    const base64Image = arrayBufferToBase64(arrayBuffer);
+    const base64Content = arrayBufferToBase64(arrayBuffer);
 
-    // Call Google Cloud Vision API
-    const visionUrl = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
-    const visionPayload = {
-        requests: [
-            {
-                image: { content: base64Image },
-                features: [
-                    { type: 'TEXT_DETECTION', maxResults: 1 },
-                ],
-            },
-        ],
-    };
+    let rawText = '';
 
-    const visionResponse = await fetch(visionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(visionPayload),
-    });
+    if (isPDF) {
+        // For PDFs, use Google Cloud Vision files:annotate (DOCUMENT_TEXT_DETECTION)
+        // Note: Cloud Vision can process single-page PDFs inline as well,
+        // but for best results we use the image-based approach by sending it as content.
+        // Cloud Vision API also accepts PDFs for TEXT_DETECTION with inputConfig.
+        const visionUrl = `https://vision.googleapis.com/v1/files:annotate?key=${apiKey}`;
+        const visionPayload = {
+            requests: [
+                {
+                    inputConfig: {
+                        content: base64Content,
+                        mimeType: 'application/pdf',
+                    },
+                    features: [
+                        { type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 },
+                    ],
+                    pages: [1, 2, 3, 4, 5], // Process up to 5 pages
+                },
+            ],
+        };
 
-    if (!visionResponse.ok) {
-        const errText = await visionResponse.text();
-        console.error('Google Vision API error:', errText);
-        return errorResponse('Google Vision API request failed', 502);
+        const visionResponse = await fetch(visionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(visionPayload),
+        });
+
+        if (!visionResponse.ok) {
+            const errText = await visionResponse.text();
+            console.error('Google Vision API error (PDF):', errText);
+            return errorResponse('Google Vision API request failed for PDF', 502);
+        }
+
+        const visionResult = await visionResponse.json();
+        const pdfResponses = visionResult.responses?.[0]?.responses || [];
+        const textParts = [];
+        for (const resp of pdfResponses) {
+            const fullText = resp?.fullTextAnnotation?.text || '';
+            if (fullText) textParts.push(fullText);
+        }
+        rawText = textParts.join('\n');
+
+    } else {
+        // For images, use standard TEXT_DETECTION
+        const visionUrl = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
+        const visionPayload = {
+            requests: [
+                {
+                    image: { content: base64Content },
+                    features: [
+                        { type: 'TEXT_DETECTION', maxResults: 1 },
+                    ],
+                },
+            ],
+        };
+
+        const visionResponse = await fetch(visionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(visionPayload),
+        });
+
+        if (!visionResponse.ok) {
+            const errText = await visionResponse.text();
+            console.error('Google Vision API error:', errText);
+            return errorResponse('Google Vision API request failed', 502);
+        }
+
+        const visionResult = await visionResponse.json();
+        const annotations = visionResult.responses?.[0]?.textAnnotations;
+        if (!annotations || annotations.length === 0) {
+            return jsonResponse({
+                success: true,
+                raw_text: '',
+                extracted: {},
+                message: 'No text detected in image',
+            });
+        }
+        rawText = annotations[0].description || '';
     }
 
-    const visionResult = await visionResponse.json();
-
-    // Extract raw text
-    const annotations = visionResult.responses?.[0]?.textAnnotations;
-    if (!annotations || annotations.length === 0) {
+    if (!rawText.trim()) {
         return jsonResponse({
             success: true,
             raw_text: '',
             extracted: {},
-            message: 'No text detected in image',
+            message: 'No text detected in document',
         });
     }
-
-    const rawText = annotations[0].description || '';
 
     // Parse structured fields from raw OCR text
     const extracted = parseOCRText(rawText, documentType);
@@ -134,6 +187,9 @@ function parseOCRText(rawText, documentType) {
         date_of_birth: null,
         nationality: null,
         sex: null,
+        race: null,
+        address: null,
+        country_of_birth: null,
         employer_name: null,
         course_title: null,
         course_provider: null,
@@ -147,6 +203,11 @@ function parseOCRText(rawText, documentType) {
     const isWorkPermit = documentType === 'work_permit' ||
         text.includes('WORK PERMIT') ||
         text.includes('EMPLOYMENT OF FOREIGN MANPOWER');
+
+    const isIdentityCard = documentType === 'work_permit' ||
+        text.includes('IDENTITY CARD') ||
+        text.includes('REPUBLIC OF SINGAPORE') ||
+        text.includes('NRIC NO');
 
     const isCertification = documentType === 'certification' ||
         text.includes('COURSE DATE') ||
@@ -162,19 +223,35 @@ function parseOCRText(rawText, documentType) {
         text.includes('VALIDITY');
 
     // ═══════════════════════════════════════════════════════════
-    // 1. FIN NUMBER (the unique identifier)
-    //    Singapore FIN: F, G, or M + 7 digits + check letter
-    //    F = issued before 2000
-    //    G = issued 2000–2021
-    //    M = issued from 2022 onwards
+    // 1. FIN / NRIC NUMBER
+    //    FIN: F/G/M + 7 digits + check letter
+    //    NRIC: S/T + 7 digits + check letter
     // ═══════════════════════════════════════════════════════════
-    // First try labeled "FIN", "ID NO", or "ID Number" pattern
-    // Also handle NRIC format: S/T + 7 digits + letter (for Singaporeans/PRs)
-    const idLabelMatch = text.match(/(?:FIN|ID\s*(?:NO|NUMBER)\.?)\s*[:\-]?\s*([FGMST]\d{7}[A-Z])/);
-    if (idLabelMatch) {
-        result.fin_number = idLabelMatch[1];
-    } else {
-        // Check for name with ID in parentheses: "VERNON TAN (S7616077E)"
+
+    // Singapore IC: "IDENTITY CARD NO." pattern
+    const icNoMatch = text.match(/IDENTITY\s*CARD\s*(?:NO\.?|NUMBER)\s*[:\-]?\s*([STFGM]\d{7}[A-Z])/);
+    if (icNoMatch) {
+        result.fin_number = icNoMatch[1];
+    }
+
+    // "NRIC No:" on back of card
+    if (!result.fin_number) {
+        const nricNoMatch = text.match(/NRIC\s*(?:NO\.?|NUMBER)\s*[:\-]?\s*([ST]\d{7}[A-Z])/);
+        if (nricNoMatch) {
+            result.fin_number = nricNoMatch[1];
+        }
+    }
+
+    // Other labeled patterns: "FIN", "ID NO", "ID Number"
+    if (!result.fin_number) {
+        const idLabelMatch = text.match(/(?:FIN|ID\s*(?:NO|NUMBER)\.?)\s*[:\-]?\s*([FGMST]\d{7}[A-Z])/);
+        if (idLabelMatch) {
+            result.fin_number = idLabelMatch[1];
+        }
+    }
+
+    // Name with ID in parentheses: "VERNON TAN (S7616077E)"
+    if (!result.fin_number) {
         const nameIdMatch = text.match(/([A-Z][A-Z\s.'\-]{4,})\s*\(([FGMST]\d{7}[A-Z])\)/);
         if (nameIdMatch) {
             result.fin_number = nameIdMatch[2];
@@ -182,12 +259,14 @@ function parseOCRText(rawText, documentType) {
                 const candidate = cleanName(nameIdMatch[1]);
                 if (isValidName(candidate)) result.worker_name = candidate;
             }
-        } else {
-            // Scan for any FIN/NRIC-format string in the text
-            const finMatch = text.match(/\b([FGMST]\d{7}[A-Z])\b/);
-            if (finMatch) {
-                result.fin_number = finMatch[1];
-            }
+        }
+    }
+
+    // General scan for FIN/NRIC-format string
+    if (!result.fin_number) {
+        const finMatch = text.match(/\b([FGMST]\d{7}[A-Z])\b/);
+        if (finMatch) {
+            result.fin_number = finMatch[1];
         }
     }
 
@@ -431,6 +510,105 @@ function parseOCRText(rawText, documentType) {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // 7a. RACE (Singapore IC)
+    // ═══════════════════════════════════════════════════════════
+    const knownRaces = ['CHINESE', 'MALAY', 'INDIAN', 'EURASIAN', 'CAUCASIAN', 'JAPANESE', 'KOREAN', 'SIKH'];
+    for (let i = 0; i < upperLines.length; i++) {
+        if (upperLines[i].match(/^RACE\s*$/)) {
+            // Value on the NEXT line
+            if (i + 1 < upperLines.length) {
+                const nextLine = upperLines[i + 1].trim();
+                if (knownRaces.some(r => nextLine.includes(r))) {
+                    result.race = nextLine;
+                    break;
+                }
+            }
+        }
+        // Same-line: "Race CHINESE"
+        const raceMatch = upperLines[i].match(/RACE\s*[:\-]?\s*(CHINESE|MALAY|INDIAN|EURASIAN|CAUCASIAN|JAPANESE|KOREAN|SIKH)/);
+        if (raceMatch) {
+            result.race = raceMatch[1].trim();
+            break;
+        }
+    }
+    // Fallback: scan for known race words near "Race" label
+    if (!result.race && (isIdentityCard || isWorkPermit)) {
+        for (const race of knownRaces) {
+            if (text.includes(race)) {
+                result.race = race;
+                break;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7b. COUNTRY / PLACE OF BIRTH (Singapore IC)
+    // ═══════════════════════════════════════════════════════════
+    for (let i = 0; i < upperLines.length; i++) {
+        const countryMatch = upperLines[i].match(/(?:COUNTRY|PLACE)\s*(?:\/\s*PLACE)?\s*(?:OF\s*)?BIRTH\s*[:\-]?\s*/);
+        if (countryMatch) {
+            // Value after the label on same line
+            const afterLabel = upperLines[i].replace(countryMatch[0], '').trim();
+            if (afterLabel.length >= 3) {
+                result.country_of_birth = afterLabel;
+            } else if (i + 1 < upperLines.length) {
+                // Value on next line
+                const nextLine = upperLines[i + 1].trim();
+                if (nextLine.length >= 3 && !nextLine.match(/^(DATE|SEX|RACE|NAME|FIN|NRIC|IDENTITY)/)) {
+                    result.country_of_birth = nextLine;
+                }
+            }
+            break;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7c. ADDRESS (Singapore IC back)
+    //     e.g. "APT BLK 221 BOON LAY PLACE #20-104\nSINGAPORE 640221"
+    // ═══════════════════════════════════════════════════════════
+    if (isIdentityCard) {
+        // Look for address patterns: BLK, APT, SINGAPORE + postal code
+        const addressParts = [];
+        for (let i = 0; i < upperLines.length; i++) {
+            // Detect lines with block/street patterns or Singapore postal code
+            if (upperLines[i].match(/(?:APT|BLK|BLOCK|AVENUE|AVE|ROAD|RD|STREET|ST|PLACE|DRIVE|DR|CRESCENT|CRES|LANE|LN|TERRACE|LORONG|LOR|JALAN|JLN|TAMPINES|WOODLANDS|JURONG|YISHUN|BEDOK|TOA PAYOH|ANG MO KIO|BUKIT|SENGKANG|PUNGGOL|PASIR RIS|CLEMENTI|QUEENSTOWN|BOON LAY|CHOA CHU KANG|HOUGANG|SERANGOON|GEYLANG)/)) {
+                addressParts.push(lines[i].trim());
+                // Check next lines for continuation (e.g. "SINGAPORE 640221")
+                for (let j = i + 1; j < Math.min(i + 3, upperLines.length); j++) {
+                    if (upperLines[j].match(/SINGAPORE\s*\d{6}/) || upperLines[j].match(/^#?\d+[\-\/]\d+/)) {
+                        addressParts.push(lines[j].trim());
+                    } else break;
+                }
+                break;
+            }
+            // Also detect "SINGAPORE xxxxxx" standalone
+            if (upperLines[i].match(/^SINGAPORE\s+\d{6}$/) && !result.address) {
+                // Look backwards for address lines
+                for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+                    if (upperLines[j].match(/(?:APT|BLK|BLOCK|AVENUE|AVE|ROAD|STREET|PLACE|DRIVE|#\d)/)) {
+                        addressParts.unshift(lines[j].trim());
+                    }
+                }
+                addressParts.push(lines[i].trim());
+                break;
+            }
+        }
+        if (addressParts.length > 0) {
+            result.address = addressParts.join(', ');
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 7d. DATE OF ISSUE (IC back)
+    // ═══════════════════════════════════════════════════════════
+    if (isIdentityCard && !result.issue_date) {
+        const dateOfIssueMatch = text.match(/DATE\s*(?:OF\s*)?ISSUE\s*[:;\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/);
+        if (dateOfIssueMatch) {
+            result.issue_date = formatDate(dateOfIssueMatch[1]);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // 8. DATES — context-aware routing
     //    "Course Date" → issue_date (NOT DOB)
     //    "Date of Birth" / "DOB" → date_of_birth
@@ -440,7 +618,7 @@ function parseOCRText(rawText, documentType) {
     // ═══════════════════════════════════════════════════════════
 
     // Course Date → issue_date
-    const courseDateMatch = text.match(/COURSE\s*DATE\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+    const courseDateMatch = text.match(/COURSE\s*DATE\s*[:\-]?\s*(\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4})/);
     if (courseDateMatch) {
         result.issue_date = formatDate(courseDateMatch[1]);
     }
@@ -460,14 +638,31 @@ function parseOCRText(rawText, documentType) {
     }
 
     // Explicit DOB (only for non-certification docs)
-    const dobMatch = text.match(/(?:DATE\s*OF\s*BIRTH|DOB|D\.?O\.?B\.?|BORN)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+    const dobMatch = text.match(/(?:DATE\s*OF\s*BIRTH|DOB|D\.?O\.?B\.?|BORN)\s*[:\-]?\s*(\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4})/);
     if (dobMatch) {
         result.date_of_birth = formatDate(dobMatch[1]);
     }
 
+    // Fallback: DOB label and date on separate lines (IC format)
+    if (!result.date_of_birth) {
+        for (let i = 0; i < upperLines.length; i++) {
+            if (upperLines[i].match(/DATE\s*OF\s*BIRTH|^DOB$/)) {
+                // Check next line for a date
+                if (i + 1 < upperLines.length) {
+                    const nextLine = upperLines[i + 1].trim();
+                    const dateMatch = nextLine.match(/^(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/);
+                    if (dateMatch) {
+                        result.date_of_birth = formatDate(dateMatch[1]);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     // Explicit Issue Date — also match "Issued Date:" pattern
     if (!result.issue_date) {
-        const issueMatch = text.match(/(?:ISSUED?\s*DATE|ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+        const issueMatch = text.match(/(?:ISSUED?\s*DATE|ISSUE|ISSUED|DATE\s*OF\s*ISSUE)\s*[:\-]?\s*(\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4})/);
         if (issueMatch) result.issue_date = formatDate(issueMatch[1]);
     }
 
@@ -508,7 +703,7 @@ function parseOCRText(rawText, documentType) {
     }
 
     // Expiry Date
-    const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP\.?)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+    const expiryMatch = text.match(/(?:EXPIR|VALID\s*(?:UNTIL|TILL|TO)|EXP\.?)\s*[:\-]?\s*(\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4})/);
     if (expiryMatch) {
         result.expiry_date = formatDate(expiryMatch[1]);
     }
@@ -521,7 +716,7 @@ function parseOCRText(rawText, documentType) {
     }
 
     // Collect all dates for fallback
-    const datePattern = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g;
+    const datePattern = /(\d{1,2})[\\\/\\.\\-](\d{1,2})[\\\/\\.\\-](\d{4})/g;
     const dates = [];
     let dateMatch2;
     while ((dateMatch2 = datePattern.exec(text)) !== null) {
@@ -623,7 +818,7 @@ function parseOCRText(rawText, documentType) {
         if (line.length < 5) continue;
         if (upperLine.match(/^(NAME|ID\s*(NO|NUMBER)|FIN|COURSE\s*(DATE|VENUE)|VALIDITY|S\/N|DATE|DOB)/)) continue;
         if (upperLine.match(/^(SERIAL\s*NUM|STUDENT\s*NUM|ISSUED?\s*DATE)/)) continue;
-        if (upperLine.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/)) continue;
+        if (upperLine.match(/\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4}/)) continue;
         if (upperLine.match(/^[FGM]\d{7}[A-Z]$/)) continue;
         if (upperLine.match(/SINGAPORE|PIONEER|STREET|AVENUE|ROAD|BLOCK/)) continue;
         if (upperLine.match(/^MR\.|^MS\.|DIRECTOR|PRINCIPAL|TRAINER(?:\s|$)|DIVISION/)) continue;
@@ -687,7 +882,7 @@ function parseOCRText(rawText, documentType) {
                     if (ucl.match(/^(HAS\s|A\s*COURSE|THIS\s|THAT\s|THE\s|CONDUCTED|IN$)/)) continue;
                     // Skip dates, names, IDs
                     if (ucl.match(/^[FGMST]\d{7}[A-Z]$/)) continue;
-                    if (ucl.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/)) continue;
+                    if (ucl.match(/\d{1,2}[\\\/\\.\\-]\d{1,2}[\\\/\\.\\-]\d{4}/)) continue;
                     if (ucl.match(/^(NAME|ID|ISSUED|SERIAL|VALID)/)) continue;
                     // This should be the course title
                     let title = cl.replace(/\s+/g, ' ').trim();
@@ -856,7 +1051,7 @@ function isValidName(name) {
  * Format a date string (DD/MM/YYYY) to ISO (YYYY-MM-DD).
  */
 function formatDate(dateStr) {
-    const match = dateStr.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+    const match = dateStr.match(/(\d{1,2})[\\\/\\.\\-](\d{1,2})[\\\/\\.\\-](\d{4})/);
     if (!match) return null;
     const day = match[1].padStart(2, '0');
     const month = match[2].padStart(2, '0');

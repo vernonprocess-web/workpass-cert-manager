@@ -214,7 +214,7 @@
           <table class="data-table" id="workers-table">
             <thead>
               <tr>
-                <th>FIN Number</th>
+                <th>FIN / NRIC</th>
                 <th>WP No</th>
                 <th>Worker Name</th>
                 <th>DOB</th>
@@ -302,7 +302,7 @@
             <div class="form-group" style="margin-bottom:16px">
               <label for="ocr-doc-type">Document Type</label>
               <select id="ocr-doc-type" class="form-control">
-                <option value="work_permit">Work Permit Card</option>
+                <option value="work_permit">IC / Work Permit</option>
                 <option value="visit_pass">Visit Pass</option>
                 <option value="certification">Certification</option>
               </select>
@@ -314,9 +314,9 @@
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              <h3>Drag &amp; drop images here</h3>
-              <p>Upload up to 4 images (front, back, certificates) • JPEG, PNG, WebP • Max 10MB each</p>
-              <input type="file" id="ocr-file-input" accept="image/*" multiple hidden>
+              <h3>Drag &amp; drop files here</h3>
+              <p>Upload up to 4 files (front, back, certificates) • JPEG, PNG, WebP, PDF • Max 10MB each</p>
+              <input type="file" id="ocr-file-input" accept="image/*,.pdf,application/pdf" multiple hidden>
             </div>
             <div id="ocr-preview-container" class="ocr-thumbnails" hidden>
               <div id="ocr-thumbnails-grid" class="ocr-thumbnails-grid"></div>
@@ -352,10 +352,10 @@
               <pre class="ocr-raw-text" id="ocr-raw-text" hidden></pre>
             </div>
             <div class="ocr-fields" id="ocr-fields">
-              <h4 class="ocr-section-title">Worker Information</h4>
+              <h4 class="ocr-section-title">Worker / IC Information</h4>
               <div class="form-row">
-                <div class="form-group"><label for="ocr-fin">FIN Number *</label><input type="text" id="ocr-fin"
-                    class="form-control" placeholder="e.g. G6550858W"></div>
+                <div class="form-group"><label for="ocr-fin">FIN / NRIC Number *</label><input type="text" id="ocr-fin"
+                    class="form-control" placeholder="e.g. G6550858W or S7616077E"></div>
                 <div class="form-group"><label for="ocr-wp-no">Work Permit No</label><input type="text" id="ocr-wp-no"
                     class="form-control" placeholder="e.g. 034773262"></div>
               </div>
@@ -375,9 +375,17 @@
                     <option value="M">Male</option>
                     <option value="F">Female</option>
                   </select></div>
+                <div class="form-group"><label for="ocr-race">Race</label><input type="text" id="ocr-race"
+                    class="form-control" placeholder="e.g. Chinese"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="ocr-country-birth">Country/Place of Birth</label><input type="text"
+                    id="ocr-country-birth" class="form-control" placeholder="e.g. Singapore"></div>
                 <div class="form-group"><label for="ocr-employer">Employer</label><input type="text" id="ocr-employer"
                     class="form-control"></div>
               </div>
+              <div class="form-group"><label for="ocr-address">Address</label><input type="text" id="ocr-address"
+                  class="form-control" placeholder="e.g. Blk 221 Boon Lay Place #20-104, Singapore 640221"></div>
 
               <h4 class="ocr-section-title">Certification (if applicable)</h4>
               <div class="form-row">

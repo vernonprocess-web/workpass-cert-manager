@@ -172,12 +172,15 @@ const App = (() => {
       if (titleEl) titleEl.textContent = worker.worker_name;
 
       detailsEl.innerHTML = `
-                <div class="profile-field"><span class="profile-field-label">FIN Number</span><span class="profile-field-value">${esc(worker.fin_number)}</span></div>
+                <div class="profile-field"><span class="profile-field-label">FIN / NRIC Number</span><span class="profile-field-value">${esc(worker.fin_number)}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Work Permit No</span><span class="profile-field-value">${esc(worker.work_permit_no || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Worker Name</span><span class="profile-field-value">${esc(worker.worker_name)}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Date of Birth</span><span class="profile-field-value">${esc(worker.date_of_birth || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Nationality</span><span class="profile-field-value">${esc(worker.nationality || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Sex</span><span class="profile-field-value">${esc(worker.sex || '—')}</span></div>
+                <div class="profile-field"><span class="profile-field-label">Race</span><span class="profile-field-value">${esc(worker.race || '—')}</span></div>
+                <div class="profile-field"><span class="profile-field-label">Country/Place of Birth</span><span class="profile-field-value">${esc(worker.country_of_birth || '—')}</span></div>
+                <div class="profile-field"><span class="profile-field-label">Address</span><span class="profile-field-value">${esc(worker.address || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Employer</span><span class="profile-field-value">${esc(worker.employer_name || '—')}</span></div>
                 <div class="profile-field"><span class="profile-field-label">Created</span><span class="profile-field-value">${formatDate(worker.created_at)}</span></div>
             `;
@@ -313,11 +316,13 @@ const App = (() => {
   function handleOCRFiles(files) {
     for (const file of files) {
       if (ocrFiles.length >= 4) {
-        showToast('Maximum 4 images allowed', 'error');
+        showToast('Maximum 4 files allowed', 'error');
         break;
       }
-      if (!file.type.startsWith('image/')) {
-        showToast(`"${file.name}" is not an image — skipped`, 'error');
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      if (!isImage && !isPDF) {
+        showToast(`"${file.name}" is not an image or PDF — skipped`, 'error');
         continue;
       }
       if (file.size > 10 * 1024 * 1024) {
@@ -353,27 +358,36 @@ const App = (() => {
       const thumb = document.createElement('div');
       thumb.className = 'ocr-thumb';
 
-      const img = document.createElement('img');
-      img.alt = file.name;
-      const reader = new FileReader();
-      reader.onload = (e) => { img.src = e.target.result; };
-      reader.readAsDataURL(file);
+      if (file.type === 'application/pdf') {
+        // PDF: show an icon instead of image preview
+        const pdfIcon = document.createElement('div');
+        pdfIcon.className = 'ocr-thumb-pdf';
+        pdfIcon.innerHTML = `<svg width="40" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><span>PDF</span>`;
+        thumb.appendChild(pdfIcon);
+      } else {
+        const img = document.createElement('img');
+        img.alt = file.name;
+        const reader = new FileReader();
+        reader.onload = (e) => { img.src = e.target.result; };
+        reader.readAsDataURL(file);
+        thumb.appendChild(img);
+      }
 
       const label = document.createElement('div');
       label.className = 'ocr-thumb-label';
-      label.textContent = `Image ${idx + 1}`;
+      label.textContent = `File ${idx + 1}`;
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'ocr-thumb-remove';
       removeBtn.textContent = '✕';
-      removeBtn.title = 'Remove this image';
+      removeBtn.title = 'Remove this file';
       removeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         ocrFiles.splice(idx, 1);
         renderOCRThumbnails();
       });
 
-      thumb.append(img, label, removeBtn);
+      thumb.append(label, removeBtn);
       grid.appendChild(thumb);
     });
   }
@@ -450,6 +464,9 @@ const App = (() => {
       setInputValue('ocr-dob', merged.date_of_birth || '');
       setInputValue('ocr-nationality', merged.nationality || '');
       setInputValue('ocr-sex', merged.sex || '');
+      setInputValue('ocr-race', merged.race || '');
+      setInputValue('ocr-country-birth', merged.country_of_birth || '');
+      setInputValue('ocr-address', merged.address || '');
       setInputValue('ocr-employer', merged.employer_name || '');
       setInputValue('ocr-course', merged.course_title || '');
       setInputValue('ocr-provider', merged.course_provider || '');
@@ -497,6 +514,9 @@ const App = (() => {
         date_of_birth: document.getElementById('ocr-dob')?.value || null,
         nationality: document.getElementById('ocr-nationality')?.value || null,
         sex: document.getElementById('ocr-sex')?.value || null,
+        race: document.getElementById('ocr-race')?.value?.trim() || null,
+        country_of_birth: document.getElementById('ocr-country-birth')?.value?.trim() || null,
+        address: document.getElementById('ocr-address')?.value?.trim() || null,
         employer_name: document.getElementById('ocr-employer')?.value || null,
       };
 
