@@ -285,19 +285,46 @@ const App = (() => {
 
       if (titleEl) titleEl.textContent = worker.worker_name;
 
+      // Extract WP Documents
+      const wpDocs = (worker.documents || []).filter(d => (d.document_type || '').toLowerCase().includes('work_permit'));
+      const wpFront = wpDocs[0];
+      const wpBack = wpDocs[1];
+
+      function renderWPImage(title, doc) {
+        if (!doc) {
+          return `
+            <div class="wp-column">
+              <span class="profile-field-label" style="flex: none; margin-bottom: 8px;">${title}</span>
+              <div class="wp-placeholder">No Image Uploaded</div>
+            </div>`;
+        }
+        const url = API.getFileUrl(doc.r2_key);
+        return `
+            <div class="wp-column">
+              <span class="profile-field-label" style="flex: none; margin-bottom: 8px;">${title}</span>
+              <a href="${url}" target="_blank" title="View Fullscreen" class="wp-lightbox">
+                <img src="${url}" alt="${title}" loading="lazy" class="wp-image" />
+              </a>
+            </div>`;
+      }
+
       detailsEl.innerHTML = `
-                <div class="profile-field"><span class="profile-field-label">FIN / NRIC Number</span><span class="profile-field-value">${esc(worker.fin_number)}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Work Permit No</span><span class="profile-field-value">${esc(worker.work_permit_no || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Worker Name</span><span class="profile-field-value">${esc(worker.worker_name)}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Date of Birth</span><span class="profile-field-value">${esc(worker.date_of_birth || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Nationality</span><span class="profile-field-value">${esc(worker.nationality || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Sex</span><span class="profile-field-value">${esc(worker.sex || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Race</span><span class="profile-field-value">${esc(worker.race || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Country/Place of Birth</span><span class="profile-field-value">${esc(worker.country_of_birth || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Address</span><span class="profile-field-value">${esc(worker.address || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Employer</span><span class="profile-field-value">${esc(worker.employer_name || '—')}</span></div>
-                <div class="profile-field"><span class="profile-field-label">WP Expiry Date</span><span class="profile-field-value">${expiryBadge(worker.wp_expiry_date)}</span></div>
-                <div class="profile-field"><span class="profile-field-label">Created</span><span class="profile-field-value">${formatDate(worker.created_at)}</span></div>
+                <div class="profile-data-col">
+                  <div class="profile-field"><span class="profile-field-label">FIN / NRIC Number</span><span class="profile-field-value">${esc(worker.fin_number)}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Work Permit No</span><span class="profile-field-value">${esc(worker.work_permit_no || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Worker Name</span><span class="profile-field-value">${esc(worker.worker_name)}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Date of Birth</span><span class="profile-field-value">${esc(worker.date_of_birth || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Nationality</span><span class="profile-field-value">${esc(worker.nationality || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Sex</span><span class="profile-field-value">${esc(worker.sex || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Race</span><span class="profile-field-value">${esc(worker.race || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Country/Place of Birth</span><span class="profile-field-value">${esc(worker.country_of_birth || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Address</span><span class="profile-field-value">${esc(worker.address || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Employer</span><span class="profile-field-value">${esc(worker.employer_name || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">WP Expiry Date</span><span class="profile-field-value">${expiryBadge(worker.wp_expiry_date)}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Created</span><span class="profile-field-value">${formatDate(worker.created_at)}</span></div>
+                </div>
+                ${renderWPImage('Work Permit Front', wpFront)}
+                ${renderWPImage('Work Permit Back', wpBack)}
             `;
 
       // Certifications
