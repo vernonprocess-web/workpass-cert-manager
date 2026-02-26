@@ -10,6 +10,8 @@ const App = (() => {
   let workersPage = 1;
   let certsPage = 1;
   let searchDebounce = null;
+  let certSortKey = 'issue_date';
+  let certSortAsc = false;
 
   // ─── Init ───────────────────────────────────────────────
   function init() {
@@ -65,6 +67,10 @@ const App = (() => {
       if (ocrFiles.length >= 4) { showToast('Maximum 4 images allowed', 'error'); return; }
       document.getElementById('ocr-file-input')?.click();
     });
+
+    // Profile cert sorting headers
+    document.getElementById('th-cert-issue')?.addEventListener('click', () => toggleCertSort('issue_date'));
+    document.getElementById('th-cert-expiry')?.addEventListener('click', () => toggleCertSort('expiry_date'));
   }
 
   // ─── Router callback ────────────────────────────────────
@@ -295,24 +301,7 @@ const App = (() => {
             `;
 
       // Certifications
-      const certTbody = document.getElementById('profile-certs-tbody');
-      if (certTbody) {
-        const certs = worker.certifications || [];
-        if (certs.length === 0) {
-          certTbody.innerHTML = '<tr><td colspan="6" class="empty-state">No certifications</td></tr>';
-        } else {
-          certTbody.innerHTML = certs.map(c => `
-                        <tr>
-                            <td>${esc(c.course_title)}</td>
-                            <td>${esc(c.course_provider || '—')}</td>
-                            <td>${esc(c.cert_serial_no || '—')}</td>
-                            <td>${esc(c.course_duration || '—')}</td>
-                            <td>${esc(c.issue_date || '—')}</td>
-                            <td>${expiryBadge(c.expiry_date)}</td>
-                        </tr>
-                    `).join('');
-        }
-      }
+      renderProfileCerts();
 
       // Documents
       const docsEl = document.getElementById('profile-documents');
@@ -336,6 +325,55 @@ const App = (() => {
       detailsEl.innerHTML = `<span class="empty-state">Error: ${esc(err.message)}</span>`;
       if (titleEl) titleEl.textContent = 'Worker Not Found';
     }
+  }
+
+  function toggleCertSort(key) {
+    if (certSortKey === key) {
+      certSortAsc = !certSortAsc;
+    } else {
+      certSortKey = key;
+      certSortAsc = false; // default new sort to Descending (newest first)
+    }
+    renderProfileCerts();
+  }
+
+  function renderProfileCerts() {
+    if (!currentWorkerProfile) return;
+
+    const certTbody = document.getElementById('profile-certs-tbody');
+    const issueIcon = document.querySelector('#th-cert-issue .sort-icon');
+    const expiryIcon = document.querySelector('#th-cert-expiry .sort-icon');
+
+    if (issueIcon) issueIcon.textContent = certSortKey === 'issue_date' ? (certSortAsc ? '↑' : '↓') : '';
+    if (expiryIcon) expiryIcon.textContent = certSortKey === 'expiry_date' ? (certSortAsc ? '↑' : '↓') : '';
+
+    if (!certTbody) return;
+
+    let certs = currentWorkerProfile.certifications ? [...currentWorkerProfile.certifications] : [];
+
+    if (certs.length === 0) {
+      certTbody.innerHTML = '<tr><td colspan="6" class="empty-state">No certifications</td></tr>';
+      return;
+    }
+
+    certs.sort((a, b) => {
+      const valA = a[certSortKey] || '';
+      const valB = b[certSortKey] || '';
+      if (valA < valB) return certSortAsc ? -1 : 1;
+      if (valA > valB) return certSortAsc ? 1 : -1;
+      return 0;
+    });
+
+    certTbody.innerHTML = certs.map(c => `
+        <tr>
+            <td>${esc(c.course_title)}</td>
+            <td>${esc(c.course_provider || '—')}</td>
+            <td>${esc(c.cert_serial_no || '—')}</td>
+            <td>${esc(c.course_duration || '—')}</td>
+            <td>${esc(c.issue_date || '—')}</td>
+            <td>${expiryBadge(c.expiry_date)}</td>
+        </tr>
+    `).join('');
   }
 
   async function exportWorkerProfile() {

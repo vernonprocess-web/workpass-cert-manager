@@ -928,7 +928,8 @@ select.form-control {
 
 .profile-field {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-color);
 }
@@ -938,6 +939,7 @@ select.form-control {
 }
 
 .profile-field-label {
+  flex: 0 0 250px;
   font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
