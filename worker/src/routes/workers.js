@@ -90,12 +90,12 @@ async function upsertWorker(request, env) {
             WHERE fin_number = ?
         `).bind(
             cleanName,
-            work_permit_no ? work_permit_no.trim() : null,
+            work_permit_no ? work_permit_no.toUpperCase().trim() : null,
             date_of_birth || null,
             nationality ? nationality.toUpperCase().trim() : null,
             sex ? sex.toUpperCase().trim() : null,
             race ? race.toUpperCase().trim() : null,
-            address ? address.trim() : null,
+            address ? address.toUpperCase().trim() : null,
             country_of_birth ? country_of_birth.toUpperCase().trim() : null,
             employer_name ? employer_name.toUpperCase().trim() : null,
             wp_expiry_date || null,
@@ -111,12 +111,12 @@ async function upsertWorker(request, env) {
         `).bind(
             cleanFin,
             cleanName,
-            work_permit_no ? work_permit_no.trim() : null,
+            work_permit_no ? work_permit_no.toUpperCase().trim() : null,
             date_of_birth || null,
             nationality ? nationality.toUpperCase().trim() : null,
             sex ? sex.toUpperCase().trim() : null,
             race ? race.toUpperCase().trim() : null,
-            address ? address.trim() : null,
+            address ? address.toUpperCase().trim() : null,
             country_of_birth ? country_of_birth.toUpperCase().trim() : null,
             employer_name ? employer_name.toUpperCase().trim() : null,
             wp_expiry_date || null

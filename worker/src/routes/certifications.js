@@ -71,10 +71,10 @@ async function createCertification(request, env) {
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(
         resolvedWorkerId,
-        course_title.trim(),
-        course_provider ? course_provider.trim() : null,
-        cert_serial_no ? cert_serial_no.trim() : null,
-        course_duration ? course_duration.trim() : null,
+        course_title.toUpperCase().trim(),
+        course_provider ? course_provider.toUpperCase().trim() : null,
+        cert_serial_no ? cert_serial_no.toUpperCase().trim() : null,
+        course_duration ? course_duration.toUpperCase().trim() : null,
         issue_date || null,
         expiry_date || null
     ).run();

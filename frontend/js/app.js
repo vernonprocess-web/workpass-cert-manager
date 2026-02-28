@@ -313,7 +313,7 @@ const App = (() => {
                   <div class="profile-field"><span class="profile-field-label">FIN / NRIC Number</span><span class="profile-field-value">${esc(worker.fin_number)}</span></div>
                   <div class="profile-field"><span class="profile-field-label">Work Permit No</span><span class="profile-field-value">${esc(worker.work_permit_no || '—')}</span></div>
                   <div class="profile-field"><span class="profile-field-label">Worker Name</span><span class="profile-field-value">${esc(worker.worker_name)}</span></div>
-                  <div class="profile-field"><span class="profile-field-label">Date of Birth</span><span class="profile-field-value">${esc(worker.date_of_birth || '—')}</span></div>
+                  <div class="profile-field"><span class="profile-field-label">Date of Birth</span><span class="profile-field-value">${formatDate(worker.date_of_birth)}</span></div>
                   <div class="profile-field"><span class="profile-field-label">Nationality</span><span class="profile-field-value">${esc(worker.nationality || '—')}</span></div>
                   <div class="profile-field"><span class="profile-field-label">Sex</span><span class="profile-field-value">${esc(worker.sex || '—')}</span></div>
                   <div class="profile-field"><span class="profile-field-label">Race</span><span class="profile-field-value">${esc(worker.race || '—')}</span></div>
@@ -397,7 +397,7 @@ const App = (() => {
             <td>${esc(c.course_provider || '—')}</td>
             <td>${esc(c.cert_serial_no || '—')}</td>
             <td>${esc(c.course_duration || '—')}</td>
-            <td>${esc(c.issue_date || '—')}</td>
+            <td>${formatDate(c.issue_date)}</td>
             <td>${expiryBadge(c.expiry_date)}</td>
         </tr>
     `).join('');
@@ -692,7 +692,7 @@ const App = (() => {
                         <td>${esc(c.course_provider || '—')}</td>
                         <td>${esc(c.cert_serial_no || '—')}</td>
                         <td>${esc(c.course_duration || '—')}</td>
-                        <td>${esc(c.issue_date || '—')}</td>
+                        <td>${formatDate(c.issue_date)}</td>
                         <td>${expiryBadge(c.expiry_date)}</td>
                         <td>
                             <div class="action-btns">
@@ -1166,9 +1166,14 @@ const App = (() => {
   }
 
   function formatDate(dateStr) {
-    if (!dateStr) return '—';
+    if (!dateStr || dateStr.trim() === '') return '—';
     try {
-      return new Date(dateStr).toLocaleDateString('en-SG', { year: 'numeric', month: 'short', day: 'numeric' });
+      const d = new Date(dateStr);
+      if (isNaN(d)) return dateStr;
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
     } catch { return dateStr; }
   }
 

@@ -285,7 +285,7 @@ function parseOCRText(rawText, documentType) {
     for (const pattern of wpPatterns) {
         const match = text.match(pattern);
         if (match) {
-            result.work_permit_no = match[1].replace(/\s+/g, '').trim();
+            result.work_permit_no = match[1].trim();
             break;
         }
     }
@@ -296,12 +296,12 @@ function parseOCRText(rawText, documentType) {
             if (upperLines[i].match(/WORK\s*PERMIT\s*NO/)) {
                 const sameLine = upperLines[i].match(/WORK\s*PERMIT\s*NO\.?\s*:?\s*(\d[\d\s]+)/);
                 if (sameLine) {
-                    result.work_permit_no = sameLine[1].replace(/\s+/g, '').trim();
+                    result.work_permit_no = sameLine[1].trim();
                 } else if (i + 1 < upperLines.length) {
-                    const nextLine = upperLines[i + 1].trim();
-                    const numMatch = nextLine.match(/^(\d[\d\s]{5,})/);
-                    if (numMatch) {
-                        result.work_permit_no = numMatch[1].replace(/\s+/g, '').trim();
+                    const nextLine = upperLines[i + 1];
+                    const sameNextLine = nextLine.match(/^(\d[\d\s]{6,})/);
+                    if (sameNextLine) {
+                        result.work_permit_no = sameNextLine[1].trim();
                     }
                 }
                 break;
