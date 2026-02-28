@@ -1151,7 +1151,7 @@ const App = (() => {
   function esc(str) {
     if (str == null) return '';
     const div = document.createElement('div');
-    div.textContent = String(str);
+    div.textContent = String(str).toUpperCase();
     return div.innerHTML;
   }
 

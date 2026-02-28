@@ -487,6 +487,7 @@ a {
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
+  text-transform: uppercase;
 }
 
 .data-table tbody tr {
@@ -994,6 +995,7 @@ select.form-control {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-white);
+  text-transform: uppercase !important;
 }
 
 .documents-grid {
